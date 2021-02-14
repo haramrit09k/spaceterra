@@ -26,8 +26,8 @@ var scaleFactor = [1, 1.1, 1.2, 1.3]; // for obstacles
 var text1, text2, text3, text4, text5, text6, text7, text8, text9;
 var scale1;
 
-var url = 'http://localhost:3008'; //dev
-// var url = 'https://mangochat.herokuapp.com'; //prod
+// var url = 'http://localhost:3008'; //dev
+var url = 'https://spaceterra.herokuapp.com'; //prod
 
 // establish socket connection
 var socket = io(url, {
