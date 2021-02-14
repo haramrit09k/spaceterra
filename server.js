@@ -25,6 +25,7 @@ app.use('/', function(req,res){
 const server = http.createServer(app);
 server.listen(port);
 console.debug('Server listening on port ' + port);
+console.log(port);
 var originList = process.env.NODE_ENV == 'production'? "https://spaceterra.herokuapp.com" : "http://localhost:3008";
 
 console.log('ORIGIN SELECTED IS '+originList);
