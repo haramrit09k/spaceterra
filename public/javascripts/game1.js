@@ -338,7 +338,6 @@ function create2() {
     //Camera follows rocket
     game.camera.follow(rocket);
     cursors = game.input.keyboard.createCursorKeys();
-    touch = game.input.addPointer();
     game.physics.arcade.enable(obstacles);
     game.physics.arcade.enable(rocket);
     game.physics.arcade.enable(alien);
@@ -388,26 +387,7 @@ function update2() {
         intensity -= 0.0007;
     //On pressing the up arrow key, the rocket moves forward in a sine wave path
     
-    game.input.onDown.add(function() {
-        distance += 0.1;
-        score = parseInt(distance);
-
-        sky.tilePosition.y += 1;
-        obstacles.y += 15;
-        aliens.y += 10;
-        rocket.animations.play('forward');
-        scoreY += 7;
-        oscIndexNew = 0;
-      });
-
-      game.input.onUp.add(function() {
-        rocket.animations.stop();
-        rocket.frame = 0;
-        oscIndexNew = oscIndexNew + 1;
-      });
-
-
-    if (cursors.up.isDown) {
+    if (cursors.up.isDown || game.input.pointer1.isDown) {
         distance += 0.1;
         score = parseInt(distance);
 
