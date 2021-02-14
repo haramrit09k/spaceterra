@@ -86,39 +86,5 @@ mongo.connect(uri, function(err, db){
           socket.emit('rec_score', response);
       });
       })
-
-      // fetch chats from db
-      // chat.find().limit(10).sort({_id:1}).toArray(function(err, response){
-      //     if(err){
-      //         throw err;
-      //     }
-
-      //     socket.emit('messages', response);
-      // });
-
-      socket.on('input', function(data){
-          let name = data.name;
-          let msg = data.msg;
-          if(name == '' || msg == ''){
-              sendStatus('Name or message missing!');
-          }
-          else{
-              // insert chat in collection
-              chat.insertOne({name: name, msg: msg}, function(){
-                 // emit messages to all users
-                  client.emit('messages', [data]);
-                  sendStatus({
-                      message: 'Message successfully sent',
-                      clear: true
-                  });
-              });
-          }
-      });
-
-      socket.on('clear', function(data){
-          chat.drop(function(){
-              client.emit('cleared');
-          })
-      });
   });
 });

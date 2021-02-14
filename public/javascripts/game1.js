@@ -36,47 +36,6 @@ var socket = io(url, {
 
 if (socket !== undefined) {
     console.log('Socket connection established...');
-
-    // populate messages display box
-    // socket.on('messages', function (data) {
-    //     if (data.length) {
-    //         for (let i = 0; i < data.length; i++) {
-    //             var message = document.createElement('div');
-    //             message.setAttribute('class', 'chat-message');
-    //             message.textContent = data[i].name + ": " + data[i].msg;
-    //             messages.appendChild(message);
-    //             messages.insertBefore(message, messages.firstChild);
-    //         }
-    //     }
-    // });
-
-    // socket.on('status', function (statusMsg) {
-    //     setStatus((typeof (statusMsg) === "object") ? statusMsg.message : statusMsg);
-
-    //     if (statusMsg.clear) {
-    //         textarea.value = '';
-    //     }
-    // });
-
-    // textarea.addEventListener('keydown', function (event) {
-    //     if (event.which === 13 && event.shiftKey == false) {
-    //         socket.emit('input', {
-    //             name: username.value,
-    //             msg: textarea.value
-    //         });
-
-    //         event.preventDefault();
-    //     }
-    // });
-
-    // clear.addEventListener('click', function () {
-    //     socket.emit('clear');
-    // });
-
-    // socket.on('cleared', function () {
-    //     messages.textContent = '';
-    // });
-
 }
 
 
