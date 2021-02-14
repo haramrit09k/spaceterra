@@ -1,1 +1,0 @@
-{"options":{},"indexes":[{"v":1,"key":{"_id":1},"name":"_id_","ns":"users.user_details"},{"v":1,"unique":true,"key":{"username":1},"name":"username_1","ns":"users.user_details","background":true}]}
