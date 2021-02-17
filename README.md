@@ -14,7 +14,10 @@ SpaceTerra is a simple single-player game inspired by the game [Sine Line](https
 - Heroku (for hosting)
 
 #### Screenshots:
+
 ![Home Page](screenshots/homepage.png)
+<figcaption>Home Page</figcaption>
+
 ![Instructions](screenshots/instructions.png)
 ![Leaderboard](screenshots/leaderboard.png)
 ![Game Play](screenshots/game.png)
