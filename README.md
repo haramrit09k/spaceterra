@@ -15,10 +15,14 @@ SpaceTerra is a simple single-player game inspired by the game [Sine Line](https
 
 #### Screenshots:
 
+##### Home Page:
 ![Home Page](screenshots/homepage.png)
-<p style="text-align: center;">Home Page</p>
 
-
+##### Instructions:
 ![Instructions](screenshots/instructions.png)
+
+##### Leaderboard:
 ![Leaderboard](screenshots/leaderboard.png)
+
+##### Game Play:
 ![Game Play](screenshots/game.png)
