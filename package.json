@@ -24,7 +24,7 @@
   "homepage": "https://github.com/haramrit09k/spaceterra#readme",
   "dependencies": {
     "ejs": "^3.1.7",
-    "express": "^4.17.1",
+    "express": "^4.17.3",
     "http": "0.0.1-security",
     "mongodb": "^3.6.4",
     "socket.io": "^3.1.1"
