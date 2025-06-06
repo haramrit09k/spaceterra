@@ -18,12 +18,20 @@
 
 ---
 
-## Tech Stack  
-- **Game Engine**: [Phaser.js](https://phaser.io)  
+## Tech Stack
+- **Game Engine**: [Phaser.js](https://phaser.io)
 - **Backend**: Node.js + [Express](https://expressjs.com/)  
 - **Database**: [MongoDB](https://www.mongodb.com/)  
 - **Real-Time Communication**: [Socket.io](https://socket.io/)  
-- **Hosting**: [Heroku](https://heroku.com)  
+- **Hosting**: [Heroku](https://heroku.com)
+
+## Structure
+The backend is split into a lightweight `server.js` that boots the HTTP
+server and a separate Express app defined in `app.js`. Real-time
+leaderboard events live in `sockets/leaderboard.js`, while environment
+configuration resides in `config/index.js`.
+Client-side game logic now lives in modular files under
+`public/javascripts/states` with an entry script `public/javascripts/game.js`.
 
 ---
 
@@ -50,6 +58,10 @@
 3. **Start the server**
    ```bash
    npm start
+   ```
+
+   The server entry point now lives in `server.js` and uses an Express
+   application exported from `app.js`.
 
 4. Open in browser
    
