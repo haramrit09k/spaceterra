@@ -4,6 +4,7 @@ const vm = require('vm');
 
 function loadGame() {
   const files = [
+    '../public/javascripts/utils.js',
     '../public/javascripts/states/landing.js',
     '../public/javascripts/states/gameplay.js',
     '../public/javascripts/states/gameover.js',
