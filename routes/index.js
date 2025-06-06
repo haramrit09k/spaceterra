@@ -4,10 +4,13 @@ var mongoose = require('mongoose');
 var _ = require('underscore');
 var User = require('../models/User');
 var request = require('./request');
+const config = require('../config');
 
-router.get('/', function(req, res, next){
-	res.render('index');
-})
+router.get('/', (req, res) => {
+    res.render('index', { 
+        origin: config.origin 
+    });
+});
 
 router.get('/get_username', function(req,res){
 	var name = new Object();

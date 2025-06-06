@@ -26,7 +26,8 @@ var text1, text2, text3, text4, text5, text6, text7, text8, text9;
 var scale1;
 
 // var url = 'http://localhost:3008'; //dev
-var url = 'https://spaceterra.herokuapp.com'; //prod
+// var url = 'https://spaceterra.herokuapp.com'; //prod
+var url = window.CONFIG.origin;
 
 var socket = io(url, { withCredentials: true });
 if (socket !== undefined) {
