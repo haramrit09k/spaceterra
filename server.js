@@ -14,10 +14,12 @@ const io = socketio(server, {
   },
 });
 
-const uri = "mongodb://127.0.0.1:27017";
-const client = new MongoClient(uri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
+// Use the configured MongoDB URI. The value can be overridden with the
+// MONGODB_URI environment variable for local testing or production
+// deployments, and otherwise defaults to the local spaceterra database.
+const client = new MongoClient(config.mongoUri, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
 });
 
 client.connect(err => {
