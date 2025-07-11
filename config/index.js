@@ -8,4 +8,7 @@ const origin = process.env.NODE_ENV === 'production'
 // value configured on the host. If the variable isn't provided, fall back to
 // a local database named "spaceterra".
 const mongoUri = process.env.MONGODB_URI || 'mongodb://127.0.0.1/spaceterra';
-module.exports = { port, origin, mongoUri };
+const googleClientID = process.env.GOOGLE_CLIENT_ID || '';
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
+
+module.exports = { port, origin, mongoUri, googleClientID, googleClientSecret };

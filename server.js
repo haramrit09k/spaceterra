@@ -29,6 +29,7 @@ client.connect(err => {
   console.log('Connection to DB established!');
   console.log(config.mongoUri);
   const db = client.db('spaceterra');
+  app.locals.db = db;
   require('./sockets/leaderboard')(io, db);
 });
 
