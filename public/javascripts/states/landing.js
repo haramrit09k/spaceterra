@@ -63,21 +63,34 @@ function create1() {
     fullButton = game.add.button(70, 90, 'fullButton', goFull, this, 2, 1, 0);
     fullButton.scale.setTo(0.5, 0.5);
 
-    if (username == null) {
-        while (true) {
-            username = prompt("Enter username: ");
+    statsText = game.add.text(350, 370, '', { fontSize: '24px', fill: '#F8E22E' });
+    statsText.anchor.setTo(0.5, 0.5);
 
-            if (username == '' || username == null) {
-                // user pressed OK, but username invalid or does not username anything
-                alert("Invalid username.");
-            } else {
-                // user typed something valid and hit OK
-                return username;
-            }
-        }
+    if (username == null) {
+        fetch('/api/user')
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (data.user) {
+                    username = data.user.displayName || data.user.email;
+                    loadStats();
+                } else {
+                    window.location = '/auth/google';
+                }
+            });
+    } else {
+        loadStats();
     }
 
 
+}
+function loadStats() {
+    fetch('/api/user/stats')
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+            if (data && data.score != null && data.rank != null) {
+                statsText.text = 'High Score: ' + data.score + ' (Rank ' + data.rank + ')';
+            }
+        });
 }
 function update1() {
     if (game.sound.mute) {
