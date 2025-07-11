@@ -54,8 +54,16 @@ Client-side game logic now lives in modular files under
 2. **Install dependencies**
    ```bash
    npm install
+   ```
 
-3. **Start the server**
+3. **Configure environment variables**
+   The server reads configuration such as the MongoDB connection string,
+   Google OAuth credentials, and the Express session secret from the following
+   variables: `MONGODB_URI`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+   and `SESSION_SECRET`. Set these variables locally or through your hosting
+   provider's config (e.g. Heroku **Config Vars**).
+
+4. **Start the server**
    ```bash
    npm start
    ```
@@ -63,7 +71,7 @@ Client-side game logic now lives in modular files under
    The server entry point now lives in `server.js` and uses an Express
    application exported from `app.js`.
 
-4. Open in browser
+5. Open in browser
    
 Visit `http://localhost:3000` to play!
 

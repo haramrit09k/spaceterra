@@ -10,6 +10,7 @@ var distance = 0;
 var pause_button;
 var fullButton, muteButton;
 var username;
+var statsText;
 var leader;
 var video, button, sprite, logoimg;
 var time, tempY;

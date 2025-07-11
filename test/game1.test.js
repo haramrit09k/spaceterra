@@ -16,6 +16,8 @@ function loadGame() {
     console: { log: () => {} },
     prompt: () => 'test',
     alert: () => {},
+    fetch: () => Promise.resolve({ json: () => Promise.resolve({}) }),
+    window: { CONFIG: { origin: '' } },
     Phaser: {
       CANVAS: 0,
       Keyboard: { M: 0, F: 0 },
