@@ -3,7 +3,7 @@
 /************************LANDING PAGE************************/
 
 
-var muteButton, fullButton, button, startButton, leader, googleLoginButton, logoimg, music, usernameDisplay, logoutButton, highScoreDisplay;
+var muteButton, fullButton, button, startButton, leader, googleLoginButton, logoimg, music, usernameDisplay, logoutButton, highScoreDisplay, rankDisplay, profileImage;
 
 
 function preload1() {
@@ -61,11 +61,45 @@ function create1() {
     }, this);
     googleLoginButton.anchor.setTo(1, 0); // Anchor to top-right
     googleLoginButton.scale.setTo(0.5, 0.5);
+    googleLoginButton.visible = false; // Initially hide it
 
-    // Hide the button if the user is already logged in
-    if (window.isUserLoggedIn) {
-        googleLoginButton.visible = false;
-    }
+    // Create all potential display elements but hide them initially
+    usernameDisplay = game.add.text(game.width - 10, 10, '', {
+        font: 'bold 20px Impact',
+        fill: '#F8E22E',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)'
+    });
+    usernameDisplay.anchor.setTo(1, 0);
+    usernameDisplay.padding.set(5, 10);
+    usernameDisplay.visible = false;
+
+    logoutButton = game.add.button(game.width - 10, 0, 'logoutButtonImage', function () {
+        window.location = '/logout';
+    }, this);
+    logoutButton.anchor.setTo(1, 0);
+    logoutButton.scale.setTo(0.5, 0.5);
+    logoutButton.visible = false;
+
+    highScoreDisplay = game.add.text(10, game.height - 40, '', {
+        font: 'bold 20px Impact',
+        fill: '#F8E22E',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)'
+    });
+    highScoreDisplay.anchor.setTo(0, 1);
+    highScoreDisplay.padding.set(5, 10);
+    highScoreDisplay.visible = false;
+
+    rankDisplay = game.add.text(10, game.height - 80, '', {
+        font: 'bold 20px Impact',
+        fill: '#F8E22E',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)'
+    });
+    rankDisplay.anchor.setTo(0, 1);
+    rankDisplay.padding.set(5, 10);
+    rankDisplay.visible = false;
+
+    // Profile image placeholder (will be created dynamically)
+    profileImage = null;
 
     logoimg = game.add.sprite(206, 160, 'logo');
     logoimg.scale.setTo(0.6, 0.6);
@@ -87,37 +121,46 @@ function create1() {
                 var displayName = data.user.displayName || data.user.email;
                 var firstName = displayName.split(' ')[0];
 
-                usernameDisplay = game.add.text(game.width - 10, 10, 'Hi, ' + firstName, {
-                    font: 'bold 20px Impact',
-                    fill: '#F8E22E',
-                    backgroundColor: 'rgba(0, 0, 0, 0.5)'
-                });
-                usernameDisplay.anchor.setTo(1, 0);
-                usernameDisplay.padding.set(5, 10);
+                usernameDisplay.text = 'Hi, ' + firstName;
+                usernameDisplay.visible = true;
 
-                logoutButton = game.add.button(game.width - 10, usernameDisplay.y + usernameDisplay.height + 5, 'logoutButtonImage', function () {
-                    window.location = '/logout';
-                }, this);
-                logoutButton.anchor.setTo(1, 0);
-                logoutButton.scale.setTo(0.5, 0.5);
+                // Position logout button relative to usernameDisplay
+                logoutButton.y = usernameDisplay.y + usernameDisplay.height + 5;
+                logoutButton.visible = true;
 
-                // Create high score display
-                highScoreDisplay = game.add.text(10, game.height - 40, '', {
-                    font: 'bold 20px Impact',
-                    fill: '#F8E22E',
-                    backgroundColor: 'rgba(0, 0, 0, 0.5)'
-                });
-                highScoreDisplay.anchor.setTo(0, 1);
-                highScoreDisplay.padding.set(5, 10);
+                highScoreDisplay.visible = true;
+                rankDisplay.visible = true;
 
-                googleLoginButton.visible = false; // Hide Google Sign-in button
+                // Profile Image Loading and Masking
+                var profilePicUrl = data?.user?._json?.picture;
+                if (profilePicUrl) {
+                    var dynamicImageKey = 'userProfilePic_' + Date.now();
+                    game.load.image(dynamicImageKey, profilePicUrl);
+                    game.load.onLoadComplete.addOnce(function() {
+                        profileImage = game.add.sprite(usernameDisplay.x - usernameDisplay.width - 2, usernameDisplay.y + usernameDisplay.height / 2 - 2, dynamicImageKey);
+                        profileImage.anchor.setTo(1, 0.5);
+                        profileImage.width = 44; // Increased by 10%
+                        profileImage.height = 44; // Increased by 10%
+
+                        // Create a circular mask
+                        var mask = game.add.graphics(0, 0);
+                        mask.beginFill(0xffffff);
+                        mask.drawCircle(profileImage.x - profileImage.width / 2, profileImage.y, profileImage.width / 2 * 1.5); // Increased radius by 50%
+                        profileImage.mask = mask;
+                    });
+                    game.load.start();
+                }
 
             } else {
                 // User is not logged in, show Google Sign-in button
                 googleLoginButton.visible = true;
-                if (usernameDisplay) usernameDisplay.visible = false;
-                if (logoutButton) logoutButton.visible = false;
-                if (highScoreDisplay) highScoreDisplay.visible = false;
+                // Hide all other elements
+                usernameDisplay.visible = false;
+                logoutButton.visible = false;
+                highScoreDisplay.visible = false;
+                rankDisplay.visible = false;
+                if (profileImage) profileImage.visible = false;
+                if (profileImage && profileImage.mask) profileImage.mask.visible = false;
             }
         });
 
@@ -129,6 +172,7 @@ function loadStats() {
         .then(function (data) {
             if (data && data.score != null && data.rank != null) {
                 highScoreDisplay.text = 'Your Top Score: ' + data.score;
+                rankDisplay.text = 'Leaderboard Rank: ' + data.rank;
             }
         });
 }
@@ -162,6 +206,9 @@ global.States.gameState1 = {
         if (usernameDisplay) usernameDisplay.destroy();
         if (logoutButton) logoutButton.destroy();
         if (highScoreDisplay) highScoreDisplay.destroy();
+        if (rankDisplay) rankDisplay.destroy();
+        if (profileImage) profileImage.destroy();
+        if (profileImage && profileImage.mask) profileImage.mask.destroy();
     }
 };
 
