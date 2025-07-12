@@ -1,6 +1,6 @@
 const port = process.env.PORT || 3008;
 const origin = process.env.NODE_ENV === 'production'
-  ? 'https://spaceterra.herokuapp.com'
+  ? `https://spaceterra.herokuapp.com`
   : `http://localhost:${port}`;
 // Allow overriding the MongoDB connection string via the MONGODB_URI
 // environment variable. This lets local development specify a different
