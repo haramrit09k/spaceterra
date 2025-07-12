@@ -18,24 +18,21 @@ function send_score() {
 
 }
 
-function rec_score() {
-
-    socket.on('rec_score', function (response) {
-        var j = 0;
-        while (j < response.length && j < 7) {
-            text7 = game.add.text(385, 295 + j * 52, response[j].username, { fontSize: '24px', fill: '#FFF' });
-            text8 = game.add.text(670, 295 + j * 52, response[j].score, { fontSize: '24px', fill: '#F8E22E' });
-            j++;
-            text9 = game.add.text(180, 295 + (j - 1) * 52, j, { fontSize: '24px', fill: '#F8E22E' });
-        }
-    })
-
-}
-
 function create3() {
 
     send_score();
-    rec_score();
+    
+    var onRecScore = function (response) {
+        var j = 0;
+        while (j < response.length && j < 7) {
+            game.add.text(385, 295 + j * 52, response[j].username, { fontSize: '24px', fill: '#FFF' });
+            game.add.text(670, 295 + j * 52, response[j].score, { fontSize: '24px', fill: '#F8E22E' });
+            j++;
+            game.add.text(180, 295 + (j - 1) * 52, j, { fontSize: '24px', fill: '#F8E22E' });
+        }
+    };
+    socket.on('rec_score', onRecScore);
+    this.onRecScore = onRecScore;
 
     var bg = game.add.sprite(-220, -20, 'background');
     bg.scale.setTo(0.7, 0.75);
@@ -108,7 +105,10 @@ global.States = global.States || {};
 global.States.gameState3 = {
     preload: preload3,
     create: create3,
-    update: update3
+    update: update3,
+    shutdown: function() {
+        socket.off('rec_score', this.onRecScore);
+    }
 };
 
 })(this);

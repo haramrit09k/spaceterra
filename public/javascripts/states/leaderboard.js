@@ -15,7 +15,15 @@ function create4() {
 
     socket.emit('fetch_score');
 
-    rec_score();
+    var onRecScore = function (data) {
+        for (var i = 0; i < data.length; i++) {
+            game.add.text(180, 295 + i * 52, i + 1, { fontSize: '24px', fill: '#F8E22E' });
+            game.add.text(385, 295 + i * 52, data[i].username, { fontSize: '24px', fill: '#FFF' });
+            game.add.text(670, 295 + i * 52, data[i].score, { fontSize: '24px', fill: '#F8E22E' });
+        }
+    };
+    socket.on('rec_score', onRecScore);
+    this.onRecScore = onRecScore;
 };
 
 
@@ -30,7 +38,10 @@ global.States = global.States || {};
 global.States.gameState4 = {
     preload: preload4,
     create: create4,
-    update: update4
+    update: update4,
+    shutdown: function() {
+        socket.off('rec_score', this.onRecScore);
+    }
 };
 
 })(this);
