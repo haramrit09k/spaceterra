@@ -1,3 +1,4 @@
+require('dotenv').config();
 const http = require('http');
 const { MongoClient } = require('mongodb');
 const socketio = require('socket.io');
