@@ -3,6 +3,7 @@
 /************************LANDING PAGE************************/
 
 
+var muteButton, fullButton, button, startButton, leader, googleLoginButton, logoimg, statsText, music;
 
 
 function preload1() {
@@ -10,10 +11,11 @@ function preload1() {
     game.load.spritesheet('muteUnmuteButton', 'assets/musicOnOff.png', 100, 100);
     game.load.spritesheet('fullButton', 'assets/fullScreen.png', 100, 100);
 
-    game.load.image('leader', 'assets/leaderboard1.png');
-    game.load.image('instruction', 'assets/instruction.png');
-    game.load.image('startButton', 'assets/start.png');
+    game.load.image('leader', 'assets/buttons/LEADERBOARD.png');
+    game.load.image('instruction', 'assets/buttons/INSTRUCTIONS.png');
+    game.load.image('startButton', 'assets/buttons/START.png');
     game.load.image('logo', 'assets/Space Terra LOGO4.png');
+    game.load.image('googleSignInButton', 'assets/buttons/GOOGLE_SIGN_IN.png');
 
     game.load.video('video', 'assets/video/space_travel_hi.mp4');
 
@@ -44,14 +46,20 @@ function create1() {
     muteButton = game.add.button(140, 80, 'muteUnmuteButton', mute, this);
     muteButton.scale.setTo(0.7, 0.7);
 
-    button = game.add.button(350, 530, 'instruction', instruct, 'Instructions');
-    button.scale.setTo(0.8, 0.8);
-
     startButton = game.add.button(350, 450, 'startButton', actionOnClick, 'Start');
     startButton.scale.setTo(0.8, 0.8);
 
-    leader = game.add.button(350, 610, 'leader', leaderBoard, 'leaderboard');
+    button = game.add.button(350, 540, 'instruction', instruct, 'Instructions');
+    button.scale.setTo(0.8, 0.8);
+
+    leader = game.add.button(350, 630, 'leader', leaderBoard, 'leaderboard');
     leader.scale.setTo(0.8, 0.8);
+
+    googleLoginButton = game.add.button(game.width - 20, 20, 'googleSignInButton', function () {
+        window.location = '/auth/google';
+    }, this);
+    googleLoginButton.anchor.setTo(1, 0); // Anchor to top-right
+    googleLoginButton.scale.setTo(0.5, 0.5);
 
     logoimg = game.add.sprite(206, 160, 'logo');
     logoimg.scale.setTo(0.6, 0.6);
@@ -66,20 +74,16 @@ function create1() {
     statsText = game.add.text(350, 370, '', { fontSize: '24px', fill: '#F8E22E' });
     statsText.anchor.setTo(0.5, 0.5);
 
-    if (username == null) {
-        fetch('/api/user')
-            .then(function (res) { return res.json(); })
-            .then(function (data) {
-                if (data.user) {
-                    username = data.user.displayName || data.user.email;
-                    loadStats();
-                } else {
-                    window.location = '/auth/google';
-                }
-            });
-    } else {
-        loadStats();
-    }
+    fetch('/api/user')
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+            if (data.user) {
+                username = data.user.displayName || data.user.email;
+                loadStats();
+            } else {
+                // The user is not logged in, so we can show a login button.
+            }
+        });
 
 
 }
@@ -116,7 +120,10 @@ global.States = global.States || {};
 global.States.gameState1 = {
     preload: preload1,
     create: create1,
-    update: update1
+    update: update1,
+    shutdown: function() {
+        googleLoginButton.destroy();
+    }
 };
 
 })(this);
