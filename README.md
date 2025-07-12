@@ -63,6 +63,19 @@ Client-side game logic now lives in modular files under
    and `SESSION_SECRET`. Set these variables locally or through your hosting
    provider's config (e.g. Heroku **Config Vars**).
 
+   For local development, create a `.env` file in the root directory of the project with the following content:
+
+   ```
+   MONGODB_URI=mongodb://127.0.0.1/spaceterra
+   GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
+   GOOGLE_CLIENT_SECRET=YOUR_GOOGLE_CLIENT_SECRET
+   SESSION_SECRET=your_super_secret_key
+   ```
+
+   - **`MONGODB_URI`**: Your MongoDB connection string. For local development, `mongodb://127.0.0.1/spaceterra` is a common default.
+   - **`GOOGLE_CLIENT_ID`** and **`GOOGLE_CLIENT_SECRET`**: Obtain these from the [Google Cloud Console](https://console.cloud.google.com/). You'll need to create an OAuth 2.0 Client ID for a Web application. Remember to add `http://localhost:3008/auth/google/callback` to the Authorized redirect URIs.
+   - **`SESSION_SECRET`**: A strong, random string used to sign the session ID cookie. Generate a long, random string for this.
+
 4. **Start the server**
    ```bash
    npm start
