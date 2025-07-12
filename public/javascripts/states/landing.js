@@ -3,7 +3,7 @@
 /************************LANDING PAGE************************/
 
 
-var muteButton, fullButton, button, startButton, leader, googleLoginButton, logoimg, statsText, music, usernameDisplay, logoutButton;
+var muteButton, fullButton, button, startButton, leader, googleLoginButton, logoimg, music, usernameDisplay, logoutButton, highScoreDisplay;
 
 
 function preload1() {
@@ -77,9 +77,6 @@ function create1() {
     fullButton = game.add.button(70, 90, 'fullButton', goFull, this, 2, 1, 0);
     fullButton.scale.setTo(0.5, 0.5);
 
-    statsText = game.add.text(350, 370, '', { fontSize: '24px', fill: '#F8E22E' });
-    statsText.anchor.setTo(0.5, 0.5);
-
     fetch('/api/user')
         .then(function (res) { return res.json(); })
         .then(function (data) {
@@ -104,6 +101,15 @@ function create1() {
                 logoutButton.anchor.setTo(1, 0);
                 logoutButton.scale.setTo(0.5, 0.5);
 
+                // Create high score display
+                highScoreDisplay = game.add.text(10, game.height - 40, '', {
+                    font: 'bold 20px Impact',
+                    fill: '#F8E22E',
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)'
+                });
+                highScoreDisplay.anchor.setTo(0, 1);
+                highScoreDisplay.padding.set(5, 10);
+
                 googleLoginButton.visible = false; // Hide Google Sign-in button
 
             } else {
@@ -111,6 +117,7 @@ function create1() {
                 googleLoginButton.visible = true;
                 if (usernameDisplay) usernameDisplay.visible = false;
                 if (logoutButton) logoutButton.visible = false;
+                if (highScoreDisplay) highScoreDisplay.visible = false;
             }
         });
 
@@ -121,7 +128,7 @@ function loadStats() {
         .then(function (res) { return res.json(); })
         .then(function (data) {
             if (data && data.score != null && data.rank != null) {
-                statsText.text = 'High Score: ' + data.score + ' (Rank ' + data.rank + ')';
+                highScoreDisplay.text = 'Your Top Score: ' + data.score;
             }
         });
 }
@@ -154,6 +161,7 @@ global.States.gameState1 = {
         if (googleLoginButton) googleLoginButton.destroy();
         if (usernameDisplay) usernameDisplay.destroy();
         if (logoutButton) logoutButton.destroy();
+        if (highScoreDisplay) highScoreDisplay.destroy();
     }
 };
 
