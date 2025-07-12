@@ -23,38 +23,6 @@
   body {
     margin: 0px;
   }
-
-  #userInfoContainer {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    background-color: rgba(0, 0, 0, 0.5); /* Dark background with some transparency */
-    padding: 5px 10px;
-    border-radius: 8px;
-    font-family: 'Impact', sans-serif; /* Using Impact font for consistency */
-    color: #F8E22E; /* Yellow color from the game */
-    font-size: 20px;
-  }
-
-  #usernameDisplay {
-    margin-right: 10px;
-  }
-
-  #logout {
-    color: #F8E22E; /* Yellow color for logout link */
-    text-decoration: none;
-    padding: 5px 8px;
-    border: 1px solid #F8E22E;
-    border-radius: 5px;
-    transition: background-color 0.3s ease;
-  }
-
-  #logout:hover {
-    background-color: rgba(248, 226, 46, 0.2); /* Light yellow hover effect */
-  }
 </style>
 
 <body>
@@ -71,24 +39,8 @@
     <script type="text/javascript" src="/javascripts/states/instructions.js"></script>
     <script type="text/javascript" src="/javascripts/config.js"></script>
     <script type="text/javascript" src="/javascripts/game.js"></script>
-    <div id="userInfoContainer" style="display:none;">
-      <span id="usernameDisplay"></span>
-      <a href="/logout" id="logout">Logout</a>
-    </div>
-    <script>
-      fetch('/api/user')
-        .then(function(res){return res.json();})
-        .then(function(data){
-          if(data.user){
-            document.getElementById('userInfoContainer').style.display = 'flex';
-            document.getElementById('usernameDisplay').innerText = 'Hi, ' + (data.user.displayName || data.user.email);
-            // Update the global username variable for Phaser states
-            if (typeof username !== 'undefined') {
-                username = data.user.displayName || data.user.email;
-            }
-          }
-        });
-    </script>
+    
+    
   </div>
 
   <label></label>

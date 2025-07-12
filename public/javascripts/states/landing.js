@@ -3,7 +3,7 @@
 /************************LANDING PAGE************************/
 
 
-var muteButton, fullButton, button, startButton, leader, googleLoginButton, logoimg, statsText, music;
+var muteButton, fullButton, button, startButton, leader, googleLoginButton, logoimg, statsText, music, usernameDisplay, logoutButton;
 
 
 function preload1() {
@@ -16,6 +16,7 @@ function preload1() {
     game.load.image('startButton', 'assets/buttons/START.png');
     game.load.image('logo', 'assets/Space Terra LOGO4.png');
     game.load.image('googleSignInButton', 'assets/buttons/GOOGLE_SIGN_IN.png');
+    game.load.image('logoutButtonImage', 'assets/buttons/LOG_OUT.png');
 
     game.load.video('video', 'assets/video/space_travel_hi.mp4');
 
@@ -61,6 +62,11 @@ function create1() {
     googleLoginButton.anchor.setTo(1, 0); // Anchor to top-right
     googleLoginButton.scale.setTo(0.5, 0.5);
 
+    // Hide the button if the user is already logged in
+    if (window.isUserLoggedIn) {
+        googleLoginButton.visible = false;
+    }
+
     logoimg = game.add.sprite(206, 160, 'logo');
     logoimg.scale.setTo(0.6, 0.6);
 
@@ -80,8 +86,31 @@ function create1() {
             if (data.user) {
                 username = data.user.displayName || data.user.email;
                 loadStats();
+
+                var displayName = data.user.displayName || data.user.email;
+                var firstName = displayName.split(' ')[0];
+
+                usernameDisplay = game.add.text(game.width - 10, 10, 'Hi, ' + firstName, {
+                    font: 'bold 20px Impact',
+                    fill: '#F8E22E',
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)'
+                });
+                usernameDisplay.anchor.setTo(1, 0);
+                usernameDisplay.padding.set(5, 10);
+
+                logoutButton = game.add.button(game.width - 10, usernameDisplay.y + usernameDisplay.height + 5, 'logoutButtonImage', function () {
+                    window.location = '/logout';
+                }, this);
+                logoutButton.anchor.setTo(1, 0);
+                logoutButton.scale.setTo(0.5, 0.5);
+
+                googleLoginButton.visible = false; // Hide Google Sign-in button
+
             } else {
-                // The user is not logged in, so we can show a login button.
+                // User is not logged in, show Google Sign-in button
+                googleLoginButton.visible = true;
+                if (usernameDisplay) usernameDisplay.visible = false;
+                if (logoutButton) logoutButton.visible = false;
             }
         });
 
@@ -122,7 +151,9 @@ global.States.gameState1 = {
     create: create1,
     update: update1,
     shutdown: function() {
-        googleLoginButton.destroy();
+        if (googleLoginButton) googleLoginButton.destroy();
+        if (usernameDisplay) usernameDisplay.destroy();
+        if (logoutButton) logoutButton.destroy();
     }
 };
 
