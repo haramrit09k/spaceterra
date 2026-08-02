@@ -4,6 +4,7 @@ const session = require('express-session');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const config = require('./config');
+const { createPublicHealthHandler } = require('./routes/public-health');
 
 const app = express();
 
@@ -68,6 +69,8 @@ app.get(
 app.get('/api/user', (req, res) => {
   res.json({ user: req.user || null });
 });
+
+app.get('/api/public/health', createPublicHealthHandler());
 
 app.get('/api/user/stats', async (req, res, next) => {
   if (!req.user) {
