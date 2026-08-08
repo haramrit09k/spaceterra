@@ -1,6 +1,8 @@
 const express = require('express');
 const path = require('path');
 const session = require('express-session');
+const helmet = require('helmet');
+const { rateLimit } = require('express-rate-limit');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const config = require('./config');
@@ -8,19 +10,48 @@ const { createPublicHealthHandler } = require('./routes/public-health');
 
 const app = express();
 
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.use(helmet({
+  // The legacy Phaser client uses inline assets; retain the other Helmet protections.
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.use(
-  session({
+const sessionMiddleware = session({
     // Use the session secret configured via the SESSION_SECRET environment
     // variable. This allows different values in production versus local
     // development and avoids hardcoding secrets in the repository.
     secret: config.sessionSecret,
+    name: 'spaceterra.sid',
     resave: false,
     saveUninitialized: false,
-  })
-);
+    cookie: {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 24 * 60 * 60 * 1000,
+    },
+  });
+
+app.use(sessionMiddleware);
+app.locals.sessionMiddleware = sessionMiddleware;
+
+app.use('/auth', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+}));
+
+app.use('/api', rateLimit({
+  windowMs: 60 * 1000,
+  limit: 120,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+}));
 
 app.use(passport.initialize());
 app.use(passport.session());
@@ -39,6 +70,7 @@ passport.use(
       clientID: config.googleClientID,
       clientSecret: config.googleClientSecret,
       callbackURL: `${config.origin}/auth/google/callback`,
+      state: true,
     },
     (accessToken, refreshToken, profile, done) => done(null, profile)
   )

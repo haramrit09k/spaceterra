@@ -15,6 +15,9 @@ const io = socketio(server, {
   },
 });
 
+// Share the signed Express session with Socket.IO so score identity is server-owned.
+io.engine.use(app.locals.sessionMiddleware);
+
 // Use the configured MongoDB URI. The value can be overridden with the
 // MONGODB_URI environment variable for local testing or production
 // deployments, and otherwise defaults to the local spaceterra database.
@@ -28,7 +31,6 @@ client.connect(err => {
     throw err;
   }
   console.log('Connection to DB established!');
-  console.log(config.mongoUri);
   const db = client.db('spaceterra');
   app.locals.db = db;
   require('./sockets/leaderboard')(io, db);

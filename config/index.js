@@ -15,6 +15,10 @@ const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
 // provided for local development.
 const sessionSecret = process.env.SESSION_SECRET || 'changeme';
 
+if (process.env.NODE_ENV === 'production' && sessionSecret === 'changeme') {
+  throw new Error('SESSION_SECRET must be configured in production');
+}
+
 module.exports = {
   port,
   origin,
