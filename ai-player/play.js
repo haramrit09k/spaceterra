@@ -12,6 +12,7 @@ require('dotenv').config();
 const { chromium } = require('playwright');
 const { startHarnessServer, PORT } = require('./harness-server');
 const { callJev, heuristicNoul, projectThreats } = require('./jev');
+const { p95LatencyMs, decideSafety } = require('./decide');
 
 const TICK_MS = 100; // near the fast end of Jev's documented 70-500ms latency window.
 // There's no point sensing/deciding faster than the model you're driving
@@ -19,7 +20,6 @@ const TICK_MS = 100; // near the fast end of Jev's documented 70-500ms latency w
 // yourself about how "real-time" the real thing could be.
 const NEAR_DEATH_FRAMES = 250; // gameplay.js force-kills the rocket at oscIndexNew === 300
 const SAFE_THRESHOLD = 0.65;
-const MS_PER_FRAME = 1000 / 60;
 
 // A hardcoded reflex horizon calibrated to the *documented* 70-500ms latency
 // (originally 18 frames, ~300ms) turned out to be wrong: measured real
@@ -29,20 +29,15 @@ const MS_PER_FRAME = 1000 / 60;
 // before the next one lands, so a threat judged by Jev's cached answer can
 // be reacting to threats.json from up to ~2x the latest measured latency
 // ago. So both the reflex horizon and how long we'll trust a cached answer
-// are derived from what we actually measure, not a number picked in advance.
+// are derived from what we actually measure (decide.js), not a number
+// picked in advance - see ai-player/decide.test.js for the specific
+// staleness scenarios this fixes.
 const LATENCY_HISTORY_SIZE = 20;
-const DEFAULT_LATENCY_MS = 500; // assumption before any call has completed - the docs' own worst case
-const MIN_REFLEX_FRAMES_AHEAD = 6; // floor (~100ms) so the horizon can't collapse to ~0
 
 const latencyHistory = [];
 function recordLatency(ms) {
   latencyHistory.push(ms);
   if (latencyHistory.length > LATENCY_HISTORY_SIZE) latencyHistory.shift();
-}
-function p95LatencyMs() {
-  if (latencyHistory.length === 0) return DEFAULT_LATENCY_MS;
-  const sorted = [...latencyHistory].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.ceil(0.95 * sorted.length) - 1)];
 }
 
 function parseArgs() {
@@ -155,37 +150,20 @@ async function main() {
           });
       }
 
-      const observedLatencyMs = p95LatencyMs();
-      // + TICK_MS because our own poll loop only checks in every TICK_MS ms,
-      // so a decision can be up to one tick late even with zero network lag.
-      const reflexFramesAhead = Math.max(
-        MIN_REFLEX_FRAMES_AHEAD,
-        Math.ceil((observedLatencyMs + TICK_MS) / MS_PER_FRAME)
-      );
-      // Give a cached answer roughly one more full latency-cycle of grace
-      // (the time until the *next* background call could plausibly land)
-      // before refusing to trust it at all.
-      const maxJevAgeMs = observedLatencyMs * 2;
-
+      const observedLatencyMs = p95LatencyMs(latencyHistory);
       const nearestFramesAhead = state.threats.length
         ? Math.min(...projectThreats(state).map((t) => t.framesAhead))
         : Infinity;
-      const jevAgeMs = Date.now() - lastJevResult.timestamp;
 
-      let safety;
-      let source;
-      let latencyMs;
-      if (nearestFramesAhead <= reflexFramesAhead) {
-        safety = heuristicNoul(state);
-        source = 'local-reflex';
-        latencyMs = 0;
-      } else if (jevAgeMs <= maxJevAgeMs) {
-        ({ safe_to_advance: safety, source, latencyMs } = lastJevResult);
-      } else {
-        safety = heuristicNoul(state);
-        source = 'local-reflex-stale-jev';
-        latencyMs = 0;
-      }
+      const { safety, source, reflexFramesAhead } = decideSafety({
+        nearestFramesAhead,
+        lastJevResult,
+        now: Date.now(),
+        localHeuristicSafety: heuristicNoul(state),
+        observedLatencyMs,
+        tickMs: TICK_MS,
+      });
+      const latencyMs = source === 'jev' ? lastJevResult.latencyMs : 0;
 
       const mustHold = state.oscIndexNew > NEAR_DEATH_FRAMES; // safety override: standing still too long is instant death
       const wantsHold = mustHold || safety >= SAFE_THRESHOLD;
