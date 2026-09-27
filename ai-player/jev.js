@@ -13,29 +13,18 @@
 // 0.87. That maps directly onto our situation: "is it safe to hold up right
 // now?" -> a number we can threshold.
 //
-// api.typesafe.ai is not reachable from this sandbox's network policy (it's
-// not on the egress allowlist), so callJev() falls back to a small
-// hand-written heuristic that answers the exact same question the same way
-// Jev would be asked to: geometry in, probability out. Swap in the real
-// fetch call (already wired below) the moment you have a TYPESAFE_API_KEY
-// and network access - nothing else in this project needs to change.
+// Without a TYPESAFE_API_KEY (e.g. .env is empty, or this is running in a
+// sandbox with no network access to api.typesafe.ai), callJev() falls back
+// to a small hand-written heuristic that answers the exact same question the
+// same way Jev would be asked to: geometry in, probability out. Set the key
+// in .env and nothing else in this project needs to change.
+//
+// Request shape below is confirmed against the live API's validation
+// errors, then cross-checked against docs.typesafe.ai/api.md: `questions`
+// is a dict keyed by question id, `model` must be "jev-latest", and a noul
+// question takes `instructions` (not `text`) plus an optional `criteria`.
 
 const TYPESAFE_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
-
-function buildRequest(state) {
-  return {
-    state,
-    questions: [
-      {
-        id: 'safe_to_advance',
-        type: 'noul',
-        text:
-          'Given the rocket\'s x position and the nearest incoming obstacles, ' +
-          'is it safe to hold the "up" key right now without colliding?',
-      },
-    ],
-  };
-}
 
 // The rocket's x is a pure sine wave (see utils.js's oscillation()) that
 // keeps swinging whether or not we're advancing - the player never steers
@@ -50,30 +39,72 @@ function predictFutureX(state, framesAhead) {
   return CENTER + AMPLITUDE * Math.sin(futureOsc / state.intensity);
 }
 
-// Stand-in for Jev: same input, same output shape, no network call.
-// For every threat, project the rocket's sine-wave position forward to the
-// moment that threat would reach the collision line *if we keep holding*,
-// and score clearance against that predicted position. The worst (most
-// dangerous) threat sets the overall probability, so one near-miss can't be
-// hidden by several safe ones.
-function heuristicNoul(state) {
-  const { threats } = state;
-
-  if (threats.length === 0) return 0.95; // nothing ahead: safe by default
-
-  let worst = 1;
-  for (const threat of threats) {
+// Do the trajectory math ourselves and hand the *result* to whoever answers
+// the safety question (Jev or the heuristic), instead of handing over raw
+// oscIndex/intensity and expecting them to derive the sine wave. A typed
+// decision model like Jev has no way to reverse-engineer "this number means
+// project a sine wave forward" from a sentence of instructions - it'll just
+// judge the rocket's current position against the threat's current
+// position, which is the exact naive mistake this project already hit once
+// (see the README's design-decisions section, and predictFutureX above).
+// Pre-computing clearance turns its job into "judge these numbers," which is
+// what a fast typed-decision model is actually good at.
+function projectThreats(state) {
+  return state.threats.map((threat) => {
     const framesAhead = Math.max(1, threat.y / threat.scrollRate);
     const predictedX = predictFutureX(state, framesAhead);
-    const dx = Math.abs(threat.x - predictedX);
-    const clearance = dx - threat.halfWidth;
+    const clearancePx = Math.abs(threat.x - predictedX) - threat.halfWidth;
+    return {
+      kind: threat.kind,
+      framesAhead: Math.round(framesAhead),
+      clearancePx: Math.round(clearancePx),
+    };
+  });
+}
+
+function buildRequest(state) {
+  return {
+    model: 'jev-latest',
+    state: {
+      oscIndexNew: state.oscIndexNew,
+      threats: projectThreats(state),
+    },
+    questions: {
+      safe_to_advance: {
+        type: 'noul',
+        instructions:
+          'Each entry in state.threats is a threat the rocket may collide with if ' +
+          'it keeps advancing, already projected forward to the moment it would ' +
+          'reach the rocket: "framesAhead" is how many frames until then, and ' +
+          '"clearancePx" is the predicted gap in pixels between the rocket and ' +
+          'the threat at that moment (0 or negative means a collision; 150px or ' +
+          'more means comfortably clear). Weigh threats with a low framesAhead ' +
+          'far more heavily than distant ones. Is it safe to hold the "up" key ' +
+          'right now, i.e. will the rocket clear every threat?',
+      },
+    },
+  };
+}
+
+// Stand-in for Jev: same input, same output shape, no network call.
+// Uses the same pre-computed clearance/framesAhead as buildRequest() above,
+// so the fallback and the real call are judging identical numbers. The worst
+// (most dangerous) threat sets the overall probability, so one near-miss
+// can't be hidden by several safe ones.
+function heuristicNoul(state) {
+  const projected = projectThreats(state);
+
+  if (projected.length === 0) return 0.95; // nothing ahead: safe by default
+
+  let worst = 1;
+  for (const threat of projected) {
     // Squash clearance (pixels) into a 0..1 "how safe" score. 0 clearance or
     // less -> ~0 (about to hit); 150px+ clearance -> ~1 (plenty of room).
     // The closer the threat is (fewer frames away), the more that score
     // dominates, since a miss you're about to have matters more than one
     // several hundred pixels away.
-    const urgency = Math.max(0, 1 - framesAhead / 40);
-    const safety = Math.max(0, Math.min(1, clearance / 150));
+    const urgency = Math.max(0, 1 - threat.framesAhead / 40);
+    const safety = Math.max(0, Math.min(1, threat.clearancePx / 150));
     const weighted = 1 - urgency * (1 - safety);
     worst = Math.min(worst, weighted);
   }
@@ -88,9 +119,11 @@ async function callJev(state) {
     return {
       safe_to_advance: heuristicNoul(state),
       source: 'heuristic-fallback',
+      latencyMs: 0,
     };
   }
 
+  const startedAt = Date.now();
   const res = await fetch(TYPESAFE_ENDPOINT, {
     method: 'POST',
     headers: {
@@ -99,13 +132,16 @@ async function callJev(state) {
     },
     body: JSON.stringify(payload),
   });
+  const latencyMs = Date.now() - startedAt;
 
   if (!res.ok) {
     throw new Error(`Jev request failed: ${res.status} ${await res.text()}`);
   }
 
   const data = await res.json();
-  return { safe_to_advance: data.answers.safe_to_advance, source: 'jev' };
+  // A noul answer is { type: 'noul', noul: <0..1 probability> }, keyed by
+  // the question id we chose ('safe_to_advance').
+  return { safe_to_advance: data.answers.safe_to_advance.noul, source: 'jev', latencyMs };
 }
 
-module.exports = { callJev, heuristicNoul, buildRequest };
+module.exports = { callJev, heuristicNoul, buildRequest, projectThreats };
