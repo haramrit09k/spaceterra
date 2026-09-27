@@ -65,8 +65,12 @@ function projectThreats(state) {
 function buildRequest(state) {
   return {
     model: 'jev-latest',
+    // oscIndexNew (the idle-death counter) used to be sent here too, but
+    // nothing in `instructions` ever told Jev what it meant, so it was just
+    // noise the model couldn't use. play.js's mustHold override already
+    // force-holds deterministically once it crosses the threshold - that
+    // case never needs to reach Jev at all.
     state: {
-      oscIndexNew: state.oscIndexNew,
       threats: projectThreats(state),
     },
     questions: {

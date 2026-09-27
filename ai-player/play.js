@@ -19,15 +19,31 @@ const TICK_MS = 100; // near the fast end of Jev's documented 70-500ms latency w
 // yourself about how "real-time" the real thing could be.
 const NEAR_DEATH_FRAMES = 250; // gameplay.js force-kills the rocket at oscIndexNew === 300
 const SAFE_THRESHOLD = 0.65;
-// The game keeps running in the browser's own render loop while we `await
-// callJev()` - a real network call, unlike the instant heuristic. A 300ms
-// round trip is ~18 frames at 60fps; if the nearest threat is going to
-// arrive sooner than that, Jev's answer would come back *after* the moment
-// it needed to matter. So for genuinely imminent threats we skip the
-// network and decide locally instead - same idea as a self-driving car's
-// low-level collision system backing up its slower route planner. Jev still
-// gets every non-urgent decision, which is most of them.
-const REFLEX_FRAMES_AHEAD = 18;
+const MS_PER_FRAME = 1000 / 60;
+
+// A hardcoded reflex horizon calibrated to the *documented* 70-500ms latency
+// (originally 18 frames, ~300ms) turned out to be wrong: measured real
+// round trips ran as high as ~900ms. Worse, staleness compounds - with one
+// call in flight at a time, an answer computed from a state up to one
+// latency-cycle old then gets *used* for up to another full latency cycle
+// before the next one lands, so a threat judged by Jev's cached answer can
+// be reacting to threats.json from up to ~2x the latest measured latency
+// ago. So both the reflex horizon and how long we'll trust a cached answer
+// are derived from what we actually measure, not a number picked in advance.
+const LATENCY_HISTORY_SIZE = 20;
+const DEFAULT_LATENCY_MS = 500; // assumption before any call has completed - the docs' own worst case
+const MIN_REFLEX_FRAMES_AHEAD = 6; // floor (~100ms) so the horizon can't collapse to ~0
+
+const latencyHistory = [];
+function recordLatency(ms) {
+  latencyHistory.push(ms);
+  if (latencyHistory.length > LATENCY_HISTORY_SIZE) latencyHistory.shift();
+}
+function p95LatencyMs() {
+  if (latencyHistory.length === 0) return DEFAULT_LATENCY_MS;
+  const sorted = [...latencyHistory].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.ceil(0.95 * sorted.length) - 1)];
+}
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -103,15 +119,19 @@ async function main() {
     let releases = 0;
     const deadline = Date.now() + seconds * 1000;
 
-    // Real measured latency (see README) has run as high as ~900ms - nearly
-    // a full second where the game keeps playing underneath an `await`. So
-    // the loop never blocks on Jev: it fires a call in the background, and
+    // The game keeps running in the browser's own render loop while we
+    // `await` Jev - a real network call, unlike the instant heuristic. So
+    // the loop never blocks on it: it fires a call in the background, and
     // every tick acts on whatever's freshest - the local reflex for
-    // anything urgent, or Jev's last-completed answer otherwise. Jev's
-    // answer can end up a few hundred ms stale by the time it's used; that's
-    // an accepted tradeoff for not freezing the control loop entirely.
+    // anything urgent or anything Jev hasn't answered recently enough to
+    // trust, Jev's last-completed answer otherwise.
+    //
+    // timestamp starts at 0 (not Date.now()) so the very first ticks - before
+    // any real answer has landed - read as infinitely stale and fall through
+    // to the local reflex instead of trusting a made-up "probably safe"
+    // default.
     let jevInFlight = false;
-    let lastJevResult = { safe_to_advance: 0.9, source: 'startup-default', latencyMs: 0 };
+    let lastJevResult = { safe_to_advance: null, source: 'startup-none', latencyMs: 0, timestamp: 0 };
 
     while (Date.now() < deadline) {
       const state = await page.evaluate(readState);
@@ -124,7 +144,8 @@ async function main() {
         jevInFlight = true;
         callJev(state)
           .then((result) => {
-            lastJevResult = result;
+            lastJevResult = { ...result, timestamp: Date.now() };
+            if (result.source === 'jev') recordLatency(result.latencyMs);
           })
           .catch((err) => {
             console.error('[jev] background call failed:', err.message);
@@ -134,19 +155,36 @@ async function main() {
           });
       }
 
+      const observedLatencyMs = p95LatencyMs();
+      // + TICK_MS because our own poll loop only checks in every TICK_MS ms,
+      // so a decision can be up to one tick late even with zero network lag.
+      const reflexFramesAhead = Math.max(
+        MIN_REFLEX_FRAMES_AHEAD,
+        Math.ceil((observedLatencyMs + TICK_MS) / MS_PER_FRAME)
+      );
+      // Give a cached answer roughly one more full latency-cycle of grace
+      // (the time until the *next* background call could plausibly land)
+      // before refusing to trust it at all.
+      const maxJevAgeMs = observedLatencyMs * 2;
+
       const nearestFramesAhead = state.threats.length
         ? Math.min(...projectThreats(state).map((t) => t.framesAhead))
         : Infinity;
+      const jevAgeMs = Date.now() - lastJevResult.timestamp;
 
       let safety;
       let source;
       let latencyMs;
-      if (nearestFramesAhead <= REFLEX_FRAMES_AHEAD) {
+      if (nearestFramesAhead <= reflexFramesAhead) {
         safety = heuristicNoul(state);
         source = 'local-reflex';
         latencyMs = 0;
-      } else {
+      } else if (jevAgeMs <= maxJevAgeMs) {
         ({ safe_to_advance: safety, source, latencyMs } = lastJevResult);
+      } else {
+        safety = heuristicNoul(state);
+        source = 'local-reflex-stale-jev';
+        latencyMs = 0;
       }
 
       const mustHold = state.oscIndexNew > NEAR_DEATH_FRAMES; // safety override: standing still too long is instant death
@@ -167,7 +205,8 @@ async function main() {
         const latencyNote = source === 'jev' ? ` +${latencyMs}ms` : '';
         console.log(
           `[t=${tick}] score=${state.score} threats=${state.threats.length} ` +
-            `safety=${safety.toFixed(2)} (${source}${latencyNote}) ${mustHold ? '[override: near-death]' : ''} -> ${wantsHold ? 'HOLD' : 'release'}`
+            `safety=${safety.toFixed(2)} (${source}${latencyNote}) reflex<=${reflexFramesAhead}f p95=${observedLatencyMs}ms ` +
+            `${mustHold ? '[override: near-death]' : ''} -> ${wantsHold ? 'HOLD' : 'release'}`
         );
       }
 

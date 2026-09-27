@@ -15,12 +15,20 @@ node ai-player/play.js --seconds=45       # headless, 45-second run
 node ai-player/play.js --seconds=45 --headed   # watch it play in a real window
 ```
 
+Set `TYPESAFE_API_KEY` in `.env` (same pattern as `server.js`) to drive it
+with the real API. Without a key, it falls back to a local heuristic that
+answers the exact same question the exact same way.
+
 You'll see a console transcript like:
 
 ```
-[t=30] score=17 threats=3 safety=1.00 (heuristic-fallback) -> HOLD
-[t=40] score=22 threats=3 safety=0.03 (heuristic-fallback) -> release
+[t=30] score=17 threats=3 safety=0.85 (jev +358ms) reflex<=61f p95=680ms -> HOLD
+[t=40] score=22 threats=2 safety=0.20 (local-reflex) reflex<=61f p95=680ms -> release
 ```
+
+`reflex<=Nf` and `p95=Xms` are the currently-measured latency and the
+resulting reflex horizon (see "Design decisions" below) — they move as real
+latency data comes in.
 
 ## The architecture: sense → decide → act
 
@@ -47,23 +55,31 @@ calibrated answer** (a `Noul` is exactly "is this true?" → a probability from
 precisely what a real-time control problem like this needs: not a
 conversation, a fast yes/no with a confidence attached.
 
-`jev.js` builds the exact request shape Jev expects:
+`jev.js` builds the exact request shape the live API expects (confirmed
+against its 422 validation errors, then cross-checked against
+`docs.typesafe.ai/api.md` — `questions` is a dict keyed by id, not an array,
+and a noul question takes `instructions`, not `text`):
 
 ```js
 {
-  state: { rocketX, oscIndex, intensity, threats: [...] },
-  questions: [{ id: 'safe_to_advance', type: 'noul', text: '...' }]
+  model: 'jev-latest',
+  state: { threats: [{ kind, framesAhead, clearancePx }, ...] },
+  questions: {
+    safe_to_advance: { type: 'noul', instructions: '...' },
+  },
 }
 ```
 
-**Why it's not calling the real API right now:** this sandbox's network
-policy blocks `api.typesafe.ai` (confirmed with a direct `curl` — connection
-rejected), so `callJev()` falls back to `heuristicNoul()`, a hand-written
-function that answers the *same question* the *same way* a Noul call would:
-geometry in, probability out. The moment you have a `TYPESAFE_API_KEY` and
-run this somewhere with real network access, set the env var and the real
-`fetch()` path (already written, just currently unused) takes over —
-nothing else in the project changes.
+Note `state.threats` isn't the raw sensor output — `projectThreats()` in
+`jev.js` already does the trajectory math (see design decision 3 below)
+before Jev ever sees it. And `oscIndexNew` (the idle-death counter) is
+deliberately *not* included: `play.js`'s `mustHold` override already handles
+that threshold deterministically, so sending it to Jev would just be a field
+the model has no instructions for and can't use.
+
+Without a `TYPESAFE_API_KEY` in `.env`, `callJev()` falls back to
+`heuristicNoul()`, a hand-written function that answers the *same question*
+the *same way* a Noul call would: geometry in, probability out.
 
 ## Design decisions worth being able to explain
 
@@ -99,6 +115,24 @@ nothing else in the project changes.
    arc while paused. The heuristic doesn't currently model that; a sharper
    version would check whether releasing is actually safer than a
    differently-timed hold, not just default to "release when scared."
+
+5. **Real latency broke the first "don't block on Jev" fix, and the second
+   fix has to measure, not assume.** The polling interval and the first
+   version of the reflex/fallback split (design decision 1, and the async
+   background-call rework below) were both calibrated to the documented
+   70–500ms latency window. Measured round trips against the live API ran as
+   high as ~900ms. Worse: with one call in flight at a time, an answer
+   computed from a state up to one latency-cycle old then gets *used* for up
+   to another full cycle before the next one lands — so a threat judged by a
+   cached Jev answer could be reacting to obstacles that no longer exist, up
+   to ~2x the real latency ago. The fix isn't a bigger hardcoded number, it's
+   deriving both the reflex horizon and how long a cached answer stays
+   trustworthy from a rolling p95 of *measured* latency (`p95LatencyMs()` in
+   `play.js`), with a TTL so a stalled or failed call doesn't get trusted
+   forever — including at startup, where the loop used to default to an
+   optimistic "probably safe" guess for the first several ticks before any
+   real answer had landed. It now starts maximally stale instead, so it
+   falls through to the honest local heuristic until Jev actually answers.
 
 ## Files
 
