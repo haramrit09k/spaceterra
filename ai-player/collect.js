@@ -25,14 +25,31 @@
 // outcomes from actually navigating threats.
 //
 // Usage: node ai-player/collect.js [--episodes=150] [--out=path.jsonl] [--hold-prob=0.8] [--headed]
+//        node ai-player/collect.js --episodes=300 --policy=model --epsilon=0.2
+//
+// --policy=model bootstraps a second round of data from the *current*
+// model's own decisions (plus a bit of random exploration) instead of a
+// purely random policy. This matters because a model trained on random-
+// policy episodes is validated against states a random policy visits, not
+// the states its own (mostly-holding) deployed behavior actually leads to -
+// real play scored worse than the random-policy held-out metrics predicted.
+// Rolling out the model itself and labeling by true outcomes, same as
+// before, closes that gap the standard self-play way: train on the states
+// the policy you're about to run actually encounters.
 const fs = require('fs');
 const { chromium } = require('playwright');
 const { startHarnessServer, PORT } = require('./harness-server');
 const { readState } = require('./sense');
+const { startLocalModelServer } = require('./spawn-local-model');
+const { callJev } = require('./jev');
 
 const TICK_MS = 100;
 const NEAR_DEATH_FRAMES = 250; // gameplay.js force-kills the rocket at oscIndexNew === 300
 const MAX_TICKS_PER_EPISODE = 600; // 60s hard cap so a lucky non-colliding run can't stall collection
+const MODEL_POLICY_PORT = 8797; // separate from play.js's 8787 so both can run independently
+// Same threshold play.js's decision rule actually uses (see its comment on
+// why safe_to_hold alone beats comparing it against safe_to_release).
+const HOLD_THRESHOLD = 0.65;
 // A threat this far from the rocket's row is trivially safe to hold through
 // no matter what eventually happens to it - true of any scrolling-obstacle
 // game, not a fact about this one's obstacle generation. Only readings at or
@@ -47,7 +64,9 @@ function parseArgs() {
   const fixedHoldProbArg = args.find((a) => a.startsWith('--hold-prob='));
   const fixedHoldProb = fixedHoldProbArg ? Number(fixedHoldProbArg.split('=')[1]) : null;
   const headed = args.includes('--headed');
-  return { episodes, out, fixedHoldProb, headed };
+  const policy = (args.find((a) => a.startsWith('--policy=')) || '').split('=')[1] || 'random';
+  const epsilon = Number((args.find((a) => a.startsWith('--epsilon=')) || '').split('=')[1]) || 0.2;
+  return { episodes, out, fixedHoldProb, headed, policy, epsilon };
 }
 
 // Collisions only happen near the end of an episode, so most of an
@@ -61,11 +80,23 @@ function pickHoldProb(fixedHoldProb) {
   return fixedHoldProb !== null ? fixedHoldProb : 0.6 + Math.random() * 0.35;
 }
 
-// Plays one episode with a randomized hold/release policy (overridden only
-// by the near-death rule above) and returns every tick's raw observed
-// state + action, unlabeled - labelEpisode() below turns that into training
-// rows once we know how the episode actually ended.
-async function runEpisode(page, holdProb) {
+// Decides hold/release the same way play.js's active decision rule does
+// (safe_to_hold against a fixed threshold - see its comment on why that
+// currently beats comparing it against safe_to_release), with epsilon
+// chance of a random action instead so collection doesn't collapse onto
+// one deterministic trajectory per obstacle layout and still explores
+// near the boundary the model is unsure about.
+async function decideWithModel(state, epsilon) {
+  if (Math.random() < epsilon) return Math.random() < 0.5;
+  const { safe_to_hold } = await callJev(state);
+  return safe_to_hold >= HOLD_THRESHOLD;
+}
+
+// Plays one episode under either a randomized or model-driven hold/release
+// policy (overridden only by the near-death rule above) and returns every
+// tick's raw observed state + action, unlabeled - labelEpisode() below
+// turns that into training rows once we know how the episode actually ended.
+async function runEpisode(page, { policy, holdProb, epsilon }) {
   const ticks = [];
   let holding = false;
   let tick = 0;
@@ -75,7 +106,7 @@ async function runEpisode(page, holdProb) {
     if (state.gameOver) break;
 
     const mustHold = state.oscIndexNew > NEAR_DEATH_FRAMES;
-    const wantsHold = mustHold || Math.random() < holdProb;
+    const wantsHold = mustHold || (policy === 'model' ? await decideWithModel(state, epsilon) : Math.random() < holdProb);
 
     ticks.push({
       rocketX: state.rocketX,
@@ -145,7 +176,14 @@ function labelEpisode(ticks, endedInCollision) {
 }
 
 async function main() {
-  const { episodes, out, fixedHoldProb, headed } = parseArgs();
+  const { episodes, out, fixedHoldProb, headed, policy, epsilon } = parseArgs();
+
+  let localModelProc = null;
+  if (policy === 'model') {
+    console.log('[collect] policy=model: starting local model server for on-policy collection');
+    localModelProc = await startLocalModelServer('ai-player/local-model/server.py', MODEL_POLICY_PORT, 'local-model');
+    process.env.LOCAL_JEV_URL = `http://127.0.0.1:${MODEL_POLICY_PORT}/v1/systemone`;
+  }
 
   console.log(`[collect] starting static server on port ${PORT}`);
   const server = await startHarnessServer();
@@ -170,7 +208,7 @@ async function main() {
       await page.waitForFunction(() => typeof window.rocket !== 'undefined');
 
       const holdProb = pickHoldProb(fixedHoldProb);
-      const ticks = await runEpisode(page, holdProb);
+      const ticks = await runEpisode(page, { policy, holdProb, epsilon });
       const endedInCollision = await page.evaluate(() => game.state.current === 'gameState3');
       const records = labelEpisode(ticks, endedInCollision);
       totalRecords += records.length;
@@ -192,6 +230,7 @@ async function main() {
     outStream.end();
     await browser.close();
     server.close();
+    if (localModelProc) localModelProc.kill();
   }
 
   console.log(`[collect] wrote ${totalRecords} labeled rows to ${out}`);
