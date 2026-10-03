@@ -26,16 +26,33 @@ const TYPESAFE_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 // already required, so it's read fresh inside callJev() rather than
 // captured once at module-load time here.
 
+// Two questions, not one: "release" turned out not to be a free safe
+// fallback in this game - the rocket's own sine-wave oscillation keeps
+// swinging even while released (gameplay.js's oscillation() runs every
+// frame regardless of hold state), so a release can drift the rocket into
+// an obstacle that's already sitting close by just as easily as holding
+// into one can. Asking Jev's "one or more typed questions" primitive about
+// both candidate actions, then taking whichever it rates safer, replaces
+// the old single-question "hold unless unsafe, otherwise release and
+// assume that's fine" logic with an actual comparison.
 function buildRequest(state) {
   return {
     state,
     questions: [
       {
-        id: 'safe_to_advance',
+        id: 'safe_to_hold',
         type: 'noul',
         text:
           'Given the rocket\'s x position and the nearest incoming obstacles, ' +
           'is it safe to hold the "up" key right now without colliding?',
+      },
+      {
+        id: 'safe_to_release',
+        type: 'noul',
+        text:
+          'Given the rocket\'s x position and the nearest incoming obstacles, ' +
+          'is it safe to release the "up" key right now (stop advancing) without ' +
+          'the rocket\'s own oscillation drifting it into a collision?',
       },
     ],
   };
@@ -84,6 +101,19 @@ function heuristicNoul(state) {
   return worst;
 }
 
+// Reads both answers out of a Jev-shaped response. A backend that only
+// ever learned the old one-question contract (ollama_server.py,
+// laya_server.py, and the real Jev API, none of which parse `questions` -
+// they just always answer under `safe_to_advance`) won't have
+// `safe_to_release` at all; defaulting it to 1 reproduces exactly their old
+// behavior (release treated as unconditionally safe) rather than breaking
+// them. Only the local sklearn server currently answers both for real.
+function readAnswers(data, source) {
+  const safeToHold = data.answers.safe_to_hold ?? data.answers.safe_to_advance;
+  const safeToRelease = data.answers.safe_to_release ?? 1;
+  return { safe_to_hold: safeToHold, safe_to_release: safeToRelease, source };
+}
+
 async function callJev(state) {
   const payload = buildRequest(state);
   const apiKey = process.env.TYPESAFE_API_KEY;
@@ -102,8 +132,7 @@ async function callJev(state) {
       throw new Error(`Jev request failed: ${res.status} ${await res.text()}`);
     }
 
-    const data = await res.json();
-    return { safe_to_advance: data.answers.safe_to_advance, source: 'jev' };
+    return readAnswers(await res.json(), 'jev');
   }
 
   const localJevUrl = process.env.LOCAL_JEV_URL;
@@ -118,12 +147,12 @@ async function callJev(state) {
       throw new Error(`Local model request failed: ${res.status} ${await res.text()}`);
     }
 
-    const data = await res.json();
-    return { safe_to_advance: data.answers.safe_to_advance, source: 'local-model' };
+    return readAnswers(await res.json(), 'local-model');
   }
 
   return {
-    safe_to_advance: heuristicNoul(state),
+    safe_to_hold: heuristicNoul(state),
+    safe_to_release: 1,
     source: 'heuristic-fallback',
   };
 }

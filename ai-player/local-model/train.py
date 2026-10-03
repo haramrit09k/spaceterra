@@ -11,13 +11,21 @@ and it never had a chance to beat the heuristic it was distilled from.
 
 This version instead trains on ai-player/local-model/episodes.jsonl, produced
 by `node ai-player/collect.js` driving the real browser through many short
-episodes under an exploring hold/release policy. Each row is a tick where the
-rocket held "up", carrying only what the game already exposes (rocket
-position, oscillation index/intensity, one threat's position/speed/width)
-and a label derived from literally watching what happened next in that real
-episode - a collision within LABEL_WINDOW_TICKS, or not. No formula, no
-game-source constants: run ai-player/collect.js again after any gameplay
-change and this script picks up the new dynamics automatically.
+episodes under an exploring hold/release policy. Each row is one tick's
+(state, one threat, action taken) carrying only what the game already
+exposes (rocket position, oscillation index/intensity, one threat's
+position/speed/width, and whether the rocket held or released that tick),
+labeled by literally watching what happened next in that real episode -
+whether the specific sprite that eventually caused a collision was already
+close by at this tick, or not. No formula, no game-source constants: run
+ai-player/collect.js again after any gameplay change and this script picks
+up the new dynamics automatically.
+
+Both hold and release rows are included (not just holds): gameplay.js
+keeps advancing the rocket's own sine-wave position every frame regardless
+of whether the key is held, so releasing isn't automatically safe either -
+`action` is a feature, and the model learns the risk of each from real
+examples of both rather than assuming one of them is a free fallback.
 
 The model is a gradient-boosted tree ensemble rather than logistic
 regression: the real relationship between (oscIndex, intensity) and where
@@ -31,13 +39,18 @@ import sys
 import joblib
 import numpy as np
 from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
+from sklearn.utils.class_weight import compute_sample_weight
 
 EPISODES_PATH = "ai-player/local-model/episodes.jsonl"
 MODEL_PATH = "ai-player/local-model/model.joblib"
 
 # Order matters: server.py's row_features() must build vectors the same way.
-FEATURE_NAMES = ["rocketX", "oscIndex", "intensity", "threatX", "threatY", "scrollRate", "halfWidth", "framesAhead"]
+FEATURE_NAMES = [
+    "rocketX", "oscIndex", "intensity", "threatX", "threatY", "scrollRate", "halfWidth",
+    "framesAhead", "action",
+]
 
 
 def row_features(rec):
@@ -45,10 +58,11 @@ def row_features(rec):
     # us (remaining distance / current approach speed = time) - not a
     # re-derivation of any game-internal constant.
     frames_ahead = rec["threatY"] / max(rec["scrollRate"], 1e-6)
+    action = 1.0 if rec["action"] == "hold" else 0.0
     return [
         rec["rocketX"], rec["oscIndex"], rec["intensity"],
         rec["threatX"], rec["threatY"], rec["scrollRate"], rec["halfWidth"],
-        frames_ahead,
+        frames_ahead, action,
     ]
 
 
@@ -77,13 +91,18 @@ def main():
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y if len(set(y)) > 1 else None
     )
+    # A real collision is rare (~2% of rows here), so plain accuracy is
+    # useless - a model that always answers "safe" scores ~98% and never
+    # once predicts the dangerous class. Weighting samples by inverse class
+    # frequency tells the fit that getting an "unsafe" row wrong costs as
+    # much as getting many "safe" rows wrong, which is what we actually want.
+    sample_weight = compute_sample_weight("balanced", y_train)
     model = HistGradientBoostingClassifier(max_depth=4, max_iter=200, random_state=42)
-    model.fit(X_train, y_train)
+    model.fit(X_train, y_train, sample_weight=sample_weight)
 
-    train_acc = model.score(X_train, y_train)
-    test_acc = model.score(X_test, y_test)
     print(f"[train] {len(X)} labeled rows from real self-play ({y.mean():.1%} labeled safe)")
-    print(f"[train] train accuracy={train_acc:.3f} held-out accuracy={test_acc:.3f}")
+    print(f"[train] held-out report (support = rows in the 20% test split):")
+    print(classification_report(y_test, model.predict(X_test), target_names=["unsafe", "safe"], digits=3))
 
     joblib.dump(model, MODEL_PATH)
     print(f"[train] saved {MODEL_PATH}")

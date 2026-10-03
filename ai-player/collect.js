@@ -106,9 +106,16 @@ async function runEpisode(page, holdProb) {
 // culprit is whichever one was closest to the rocket's row (smallest `y`)
 // in the last couple of readings before the game flipped to gameOver. Every
 // *other* threat, including that same culprit's own earlier, farther-away
-// appearances, is a real observation of "holding here turned out fine" -
+// appearances, is a real observation of "this action turned out fine" -
 // it's specifically the ticks where the culprit was already close that get
 // labeled unsafe.
+//
+// Release ticks are kept too, not just hold ticks: gameplay.js keeps
+// advancing the rocket's own sine-wave position every frame regardless of
+// hold state, so a release can drift the rocket into a threat that's
+// already sitting close by just as easily as holding into one can.
+// Without real release-labeled examples the model would have no way to
+// learn that release carries its own risk.
 function findCulpritId(ticks, endedInCollision) {
   if (!endedInCollision) return null;
   const candidates = ticks.slice(-2).flatMap((t) => t.threats);
@@ -120,7 +127,6 @@ function labelEpisode(ticks, endedInCollision) {
   const culpritId = findCulpritId(ticks, endedInCollision);
   const records = [];
   for (const tick of ticks) {
-    if (tick.action !== 'hold') continue;
     for (const threat of tick.threats) {
       records.push({
         rocketX: tick.rocketX,
@@ -130,6 +136,7 @@ function labelEpisode(ticks, endedInCollision) {
         threatY: threat.y,
         scrollRate: threat.scrollRate,
         halfWidth: threat.halfWidth,
+        action: tick.action,
         label: threat.id === culpritId && threat.y <= NEAR_ZONE_Y ? 0 : 1,
       });
     }

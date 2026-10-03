@@ -47,7 +47,6 @@ const TICK_MS = 100; // near the fast end of Jev's documented 70-500ms latency w
 // with could ever answer - polling at 60fps would just be lying to
 // yourself about how "real-time" the real thing could be.
 const NEAR_DEATH_FRAMES = 250; // gameplay.js force-kills the rocket at oscIndexNew === 300
-const SAFE_THRESHOLD = 0.65;
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -126,12 +125,24 @@ async function main() {
       }
 
       const decideStart = Date.now();
-      const { safe_to_advance: safety, source } = await callJev(state);
+      const { safe_to_hold, safe_to_release, source } = await callJev(state);
       if (simulateLatencyMs > 0) await page.waitForTimeout(simulateLatencyMs);
       latencies.push(Date.now() - decideStart);
 
       const mustHold = state.oscIndexNew > NEAR_DEATH_FRAMES; // safety override: standing still too long is instant death
-      const wantsHold = mustHold || safety >= SAFE_THRESHOLD;
+      // jev.js now asks about both candidate actions (release isn't a free
+      // safe default in this game - see its comment), but comparing them
+      // head-to-head (wantsHold = safe_to_hold >= safe_to_release) measured
+      // *worse* in real play (avg score ~7 vs ~9 across 10 runs each) than
+      // just thresholding safe_to_hold alone. The likely reason: collect.js's
+      // random policy re-rolls its coin every tick, so almost all of its
+      // release examples are single-tick blips - real examples of "released
+      // for several ticks while the rocket's own oscillation drifted it into
+      // something" are rare, so safe_to_release is a noisier signal than
+      // safe_to_hold and isn't trustworthy to swap decisions on yet. Kept
+      // around (and logged below) because it's a legitimate, validated
+      // finding to build on - see ai-player/README.md.
+      const wantsHold = mustHold || safe_to_hold >= 0.65;
 
       if (wantsHold !== holding) {
         if (wantsHold) {
@@ -147,7 +158,8 @@ async function main() {
       if (tick % 10 === 0) {
         console.log(
           `[t=${tick}] score=${state.score} threats=${state.threats.length} ` +
-            `safety=${safety.toFixed(2)} (${source}) ${mustHold ? '[override: near-death]' : ''} -> ${wantsHold ? 'HOLD' : 'release'}`
+            `hold=${safe_to_hold.toFixed(2)} release=${safe_to_release.toFixed(2)} (${source}) ` +
+            `${mustHold ? '[override: near-death]' : ''} -> ${wantsHold ? 'HOLD' : 'release'}`
         );
       }
 
