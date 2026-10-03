@@ -9,8 +9,35 @@
 //
 // Usage: node ai-player/play.js [--seconds=60] [--headed]
 const { chromium } = require('playwright');
+const { spawn } = require('child_process');
 const { startHarnessServer, PORT } = require('./harness-server');
 const { callJev } = require('./jev');
+
+const LOCAL_MODEL_PORT = 8787;
+
+// Spawns ai-player/local-model/server.py and waits for it to accept
+// connections. Only used with --local; kept separate from jev.js so jev.js
+// doesn't need to know how its backends get started, just where to send
+// requests (LOCAL_JEV_URL).
+function startLocalModelServer() {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('python3', ['ai-player/local-model/server.py', String(LOCAL_MODEL_PORT)], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let settled = false;
+    proc.stdout.on('data', (chunk) => {
+      process.stdout.write(`[local-model] ${chunk}`);
+      if (!settled && chunk.toString().includes('serving on')) {
+        settled = true;
+        resolve(proc);
+      }
+    });
+    proc.stderr.on('data', (chunk) => process.stderr.write(`[local-model] ${chunk}`));
+    proc.on('exit', (code) => {
+      if (!settled) reject(new Error(`local-model server exited early (code ${code})`));
+    });
+  });
+}
 
 const TICK_MS = 100; // near the fast end of Jev's documented 70-500ms latency window.
 // There's no point sensing/deciding faster than the model you're driving
@@ -23,7 +50,13 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const seconds = Number((args.find((a) => a.startsWith('--seconds=')) || '').split('=')[1]) || 60;
   const headed = args.includes('--headed');
-  return { seconds, headed };
+  const local = args.includes('--local');
+  // Artificially pads every decision with N ms of delay, applied *after*
+  // callJev() resolves. Lets us feel what the real Jev API's ~900ms
+  // round-trip would do to this game loop without needing network access to
+  // it - same brain, same answers, just the latency a public HTTP API adds.
+  const simulateLatencyMs = Number((args.find((a) => a.startsWith('--simulate-latency=')) || '').split('=')[1]) || 0;
+  return { seconds, headed, local, simulateLatencyMs };
 }
 
 // Runs inside the browser page. Pulls the handful of Phaser globals that
@@ -67,7 +100,14 @@ function readState() {
 }
 
 async function main() {
-  const { seconds, headed } = parseArgs();
+  const { seconds, headed, local, simulateLatencyMs } = parseArgs();
+
+  let localModelProc = null;
+  if (local) {
+    console.log('[harness] starting local model server (ai-player/local-model/server.py)');
+    localModelProc = await startLocalModelServer();
+    process.env.LOCAL_JEV_URL = `http://127.0.0.1:${LOCAL_MODEL_PORT}/v1/systemone`;
+  }
 
   console.log(`[harness] starting static server on port ${PORT}`);
   const server = await startHarnessServer();
@@ -75,6 +115,11 @@ async function main() {
   const browser = await chromium.launch({
     executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || undefined,
     headless: !headed,
+    // Chromium's own internal sandbox needs namespaces this container
+    // doesn't grant to a root process; --no-sandbox is the standard,
+    // documented way to run headless Chrome in a container as root (not a
+    // change to anything outside Chromium itself).
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });
   const page = await browser.newPage({ viewport: { width: 960, height: 800 } });
 
@@ -91,6 +136,7 @@ async function main() {
     let tick = 0;
     let holds = 0;
     let releases = 0;
+    const latencies = [];
     const deadline = Date.now() + seconds * 1000;
 
     while (Date.now() < deadline) {
@@ -100,7 +146,11 @@ async function main() {
         break;
       }
 
+      const decideStart = Date.now();
       const { safe_to_advance: safety, source } = await callJev(state);
+      if (simulateLatencyMs > 0) await page.waitForTimeout(simulateLatencyMs);
+      latencies.push(Date.now() - decideStart);
+
       const mustHold = state.oscIndexNew > NEAR_DEATH_FRAMES; // safety override: standing still too long is instant death
       const wantsHold = mustHold || safety >= SAFE_THRESHOLD;
 
@@ -127,13 +177,17 @@ async function main() {
     }
 
     const final = await page.evaluate(() => ({ score, gameOver: game.state.current === 'gameState3' }));
+    const avgLatency = latencies.reduce((a, b) => a + b, 0) / (latencies.length || 1);
+    const maxLatency = Math.max(0, ...latencies);
     console.log('----------------------------------------');
     console.log(`Final score: ${final.score}`);
     console.log(`Ticks: ${tick}, direction changes: holds=${holds} releases=${releases}`);
+    console.log(`Decision latency: avg=${avgLatency.toFixed(1)}ms max=${maxLatency}ms (tick interval is ${TICK_MS}ms)`);
     console.log(final.gameOver ? 'Ended by collision' : 'Ended by time limit');
   } finally {
     await browser.close();
     server.close();
+    if (localModelProc) localModelProc.kill();
   }
 }
 

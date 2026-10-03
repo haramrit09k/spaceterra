@@ -22,6 +22,10 @@
 
 const TYPESAFE_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 
+// play.js --local sets process.env.LOCAL_JEV_URL only after this module is
+// already required, so it's read fresh inside callJev() rather than
+// captured once at module-load time here.
+
 function buildRequest(state) {
   return {
     state,
@@ -84,28 +88,44 @@ async function callJev(state) {
   const payload = buildRequest(state);
   const apiKey = process.env.TYPESAFE_API_KEY;
 
-  if (!apiKey) {
-    return {
-      safe_to_advance: heuristicNoul(state),
-      source: 'heuristic-fallback',
-    };
+  if (apiKey) {
+    const res = await fetch(TYPESAFE_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Jev request failed: ${res.status} ${await res.text()}`);
+    }
+
+    const data = await res.json();
+    return { safe_to_advance: data.answers.safe_to_advance, source: 'jev' };
   }
 
-  const res = await fetch(TYPESAFE_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  const localJevUrl = process.env.LOCAL_JEV_URL;
+  if (localJevUrl) {
+    const res = await fetch(localJevUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
 
-  if (!res.ok) {
-    throw new Error(`Jev request failed: ${res.status} ${await res.text()}`);
+    if (!res.ok) {
+      throw new Error(`Local model request failed: ${res.status} ${await res.text()}`);
+    }
+
+    const data = await res.json();
+    return { safe_to_advance: data.answers.safe_to_advance, source: 'local-model' };
   }
 
-  const data = await res.json();
-  return { safe_to_advance: data.answers.safe_to_advance, source: 'jev' };
+  return {
+    safe_to_advance: heuristicNoul(state),
+    source: 'heuristic-fallback',
+  };
 }
 
 module.exports = { callJev, heuristicNoul, buildRequest };

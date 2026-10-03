@@ -100,6 +100,95 @@ nothing else in the project changes.
    version would check whether releasing is actually safer than a
    differently-timed hold, not just default to "release when scared."
 
+## Local model experiment: fixing the latency problem
+
+Calling the real Jev API from outside this sandbox showed something the
+heuristic couldn't: a ~900ms round trip per decision. At a 100ms tick rate
+that's not "slightly slow," it's catastrophic — the loop makes a real
+decision roughly once a second instead of ten times a second, and the rocket
+is dead before the next answer even comes back. `--simulate-latency` proves
+this without needing network access to the real API at all:
+
+```bash
+node ai-player/play.js --seconds=20 --local --simulate-latency=900
+```
+
+```
+[t=0] score=0 threats=1 safety=0.99 (local-model)  -> HOLD
+[harness] collision detected at tick 4 - run ended
+Decision latency: avg=914.3ms max=941ms (tick interval is 100ms)
+```
+
+Dead by tick 4. That's the exact failure mode the real API produces — padded
+on top of a perfectly good model, purely from the network round trip.
+
+**The fix: run the brain locally.** `ai-player/local-model/` is a from-scratch
+open-source stand-in for Jev's hosted model:
+
+- `train.py` trains a small scikit-learn logistic regression (MIT-licensed,
+  runs on CPU) on synthetic examples labeled by the same clearance formula
+  the heuristic uses, with noise added so it learns a smooth probability
+  boundary rather than memorizing a step function.
+- `server.py` serves it over `POST /v1/systemone` with the **exact same
+  request/response shape** as the real Jev endpoint — `jev.js` doesn't know
+  or care whether it's talking to `api.typesafe.ai` or `127.0.0.1:8787`.
+
+```bash
+node ai-player/play.js --seconds=30 --local
+```
+
+```
+[t=0] score=0 threats=1 safety=0.93 (local-model)  -> HOLD
+...
+Decision latency: avg=5.2ms max=49ms (tick interval is 100ms)
+```
+
+~5ms average, inside the same process-to-localhost round trip you'd expect
+from any loopback HTTP call — about **170x faster** than the 900ms the real
+API showed, and comfortably inside a 100ms tick budget.
+
+**Why a trained-from-scratch model instead of a downloaded open-weight LLM:**
+that would arguably be a closer analogue to Jev (an open local LLM run via
+llama.cpp/Ollama with constrained decoding for a calibrated yes/no). It
+wasn't possible *in this sandbox* specifically — `huggingface.co` and
+`ollama.com` both return a `403` at the network proxy here, same as
+`api.typesafe.ai` was. `pypi.org` is reachable, so `scikit-learn` could be
+installed and trained from scratch instead. Outside this sandbox, swapping
+`server.py`'s internals for a real local LLM is the natural next step — the
+request/response contract it serves wouldn't need to change at all, same as
+swapping the heuristic for Jev didn't change `play.js`.
+
+**One honest caveat:** the local model's scores are noisier than the
+heuristic's (a model trained on noisy synthetic labels will occasionally
+misjudge a close call that the exact physics formula wouldn't) — e.g. scores
+of 34 and 15 across two 20s runs, versus the heuristic's steadier ~99 over a
+full run. That's a model-quality trade-off, separate from the latency win:
+more/better training data would close that gap without touching the
+network-latency story at all.
+
+**A bug worth knowing how to explain:** the first version of this silently
+never used the local model — it always fell through to the heuristic, with
+no error. The cause: `jev.js` read `process.env.LOCAL_JEV_URL` into a
+module-level `const` at `require()` time, but `play.js` only sets that env
+var once it decides to spawn the local server, which happens *after* `jev.js`
+is already required. Moving the `process.env.LOCAL_JEV_URL` read inside
+`callJev()` (so it's re-read on every call instead of captured once at
+import time) fixed it. A good reminder that "reads an env var" and "reads an
+env var at the right time" are different claims.
+
+### Local-model files
+
+- `local-model/train.py` — generates synthetic labeled examples from the
+  same clearance geometry the heuristic uses, trains the logistic
+  regression, saves `model.joblib`.
+- `local-model/server.py` — loads `model.joblib`, serves it on
+  `127.0.0.1:8787` with Jev's exact request/response shape.
+- `play.js --local` spawns `server.py` as a child process, points `jev.js`
+  at it via `LOCAL_JEV_URL`, and tears it down when the run ends.
+- `play.js --simulate-latency=<ms>` pads every decision with artificial
+  delay *after* it resolves — useful for feeling what a slow API (local or
+  remote) would do to this loop without needing network access to one.
+
 ## Files
 
 - `harness-server.js` — serves `public/` plus a couple of stub endpoints
