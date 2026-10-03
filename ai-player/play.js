@@ -13,6 +13,7 @@ const { startHarnessServer, PORT } = require('./harness-server');
 const { callJev } = require('./jev');
 const { readState } = require('./sense');
 const { startLocalModelServer } = require('./spawn-local-model');
+const { NEAR_DEATH_FRAMES, HOLD_THRESHOLD } = require('./policy');
 
 const LOCAL_MODEL_PORT = 8787;
 const OLLAMA_MODEL_PORT = 8788;
@@ -22,7 +23,6 @@ const TICK_MS = 100; // near the fast end of Jev's documented 70-500ms latency w
 // There's no point sensing/deciding faster than the model you're driving
 // with could ever answer - polling at 60fps would just be lying to
 // yourself about how "real-time" the real thing could be.
-const NEAR_DEATH_FRAMES = 250; // gameplay.js force-kills the rocket at oscIndexNew === 300
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -118,7 +118,7 @@ async function main() {
       // safe_to_hold and isn't trustworthy to swap decisions on yet. Kept
       // around (and logged below) because it's a legitimate, validated
       // finding to build on - see ai-player/README.md.
-      const wantsHold = mustHold || safe_to_hold >= 0.65;
+      const wantsHold = mustHold || safe_to_hold >= HOLD_THRESHOLD;
 
       if (wantsHold !== holding) {
         if (wantsHold) {

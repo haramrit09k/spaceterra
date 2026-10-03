@@ -42,14 +42,11 @@ const { startHarnessServer, PORT } = require('./harness-server');
 const { readState } = require('./sense');
 const { startLocalModelServer } = require('./spawn-local-model');
 const { callJev } = require('./jev');
+const { NEAR_DEATH_FRAMES, HOLD_THRESHOLD } = require('./policy');
 
 const TICK_MS = 100;
-const NEAR_DEATH_FRAMES = 250; // gameplay.js force-kills the rocket at oscIndexNew === 300
 const MAX_TICKS_PER_EPISODE = 600; // 60s hard cap so a lucky non-colliding run can't stall collection
 const MODEL_POLICY_PORT = 8797; // separate from play.js's 8787 so both can run independently
-// Same threshold play.js's decision rule actually uses (see its comment on
-// why safe_to_hold alone beats comparing it against safe_to_release).
-const HOLD_THRESHOLD = 0.65;
 // A threat this far from the rocket's row is trivially safe to hold through
 // no matter what eventually happens to it - true of any scrolling-obstacle
 // game, not a fact about this one's obstacle generation. Only readings at or
