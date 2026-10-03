@@ -1,95 +1,92 @@
 #!/usr/bin/env python3
-"""Trains a tiny open-source stand-in for Jev's "Noul" primitive.
+"""Trains the local Noul stand-in purely from observed self-play outcomes.
 
-Real Jev is a hosted, proprietary "System-1" model: you can't download its
-weights and run it locally. What *is* available open-source is the general
-recipe - a small, cheap classifier that turns "state + typed question" into
-a calibrated probability - so that's what this trains: a logistic regression
-(scikit-learn, MIT-licensed, runs on CPU in microseconds) that answers the
-exact same question our heuristic answers: given one incoming threat and the
-rocket's projected position, how safe is it to be holding "up" when the
-threat reaches the collision line?
+An earlier version of this script generated synthetic training examples by
+copying gameplay.js's own sine-wave constants (rocket.x = 420 + 390*sin(...))
+into a predict_future_x()-style formula, then labeled them with that same
+closed-form clearance formula. That made the "model" a compressed restatement
+of hand-read source, not something that had learned to play: it would go
+stale silently the moment obstacle generation or the oscillation math changed,
+and it never had a chance to beat the heuristic it was distilled from.
 
-Why logistic regression and not a downloaded open-weight LLM: this sandbox
-can reach pypi.org but not huggingface.co or ollama.com (checked directly -
-both 403 at the proxy), so there's no way to pull real open-weight model
-files here. Outside this sandbox, the same server.py contract (POST state +
-questions, get back a probability) would work unchanged with a local LLM
-behind it via llama.cpp/Ollama + constrained decoding - swapping the brain
-again without touching the request shape, same pattern as swapping the
-heuristic for Jev.
+This version instead trains on ai-player/local-model/episodes.jsonl, produced
+by `node ai-player/collect.js` driving the real browser through many short
+episodes under an exploring hold/release policy. Each row is a tick where the
+rocket held "up", carrying only what the game already exposes (rocket
+position, oscillation index/intensity, one threat's position/speed/width)
+and a label derived from literally watching what happened next in that real
+episode - a collision within LABEL_WINDOW_TICKS, or not. No formula, no
+game-source constants: run ai-player/collect.js again after any gameplay
+change and this script picks up the new dynamics automatically.
 
-The physics-based clearance formula (predict_future_x + squash) is used to
-*label* synthetic training examples, with noise added so the model learns a
-smooth, genuinely probabilistic boundary instead of memorizing a step
-function. The learned model is not "smarter" than the heuristic - the point
-of this experiment is latency (a same-machine HTTP round trip vs. a public
-API's ~900ms), not accuracy.
+The model is a gradient-boosted tree ensemble rather than logistic
+regression: the real relationship between (oscIndex, intensity) and where
+the rocket will be a few ticks later is a sine wave the model has to
+approximate from examples alone (it's never told the formula), which a
+linear model can't represent but a few hundred shallow trees can.
 """
 import json
-import math
-import random
+import sys
 
 import joblib
 import numpy as np
-from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.model_selection import train_test_split
 
-random.seed(42)
-np.random.seed(42)
+EPISODES_PATH = "ai-player/local-model/episodes.jsonl"
+MODEL_PATH = "ai-player/local-model/model.joblib"
 
-N_SAMPLES = 20000
-
-
-def clearance_safety(frames_ahead, dx, half_width):
-    """Same squash as heuristicNoul() in jev.js: clearance in px -> 0..1."""
-    clearance = dx - half_width
-    urgency = max(0.0, 1 - frames_ahead / 40)
-    safety = max(0.0, min(1.0, clearance / 150))
-    return 1 - urgency * (1 - safety)
+# Order matters: server.py's row_features() must build vectors the same way.
+FEATURE_NAMES = ["rocketX", "oscIndex", "intensity", "threatX", "threatY", "scrollRate", "halfWidth", "framesAhead"]
 
 
-def make_dataset(n):
-    X = []
-    y = []
-    for _ in range(n):
-        frames_ahead = random.uniform(1, 60)
-        half_width = random.uniform(20, 90)
-        # dx ranges from "dead center hit" to "far clear", weighted toward
-        # the boundary region so the classifier sees plenty of hard cases.
-        dx = max(0.0, random.gauss(half_width, 80))
+def row_features(rec):
+    # frames_ahead is plain arithmetic on two values the game already handed
+    # us (remaining distance / current approach speed = time) - not a
+    # re-derivation of any game-internal constant.
+    frames_ahead = rec["threatY"] / max(rec["scrollRate"], 1e-6)
+    return [
+        rec["rocketX"], rec["oscIndex"], rec["intensity"],
+        rec["threatX"], rec["threatY"], rec["scrollRate"], rec["halfWidth"],
+        frames_ahead,
+    ]
 
-        label_prob = clearance_safety(frames_ahead, dx, half_width)
-        # Add label noise: flip some labels near the boundary so training
-        # data isn't a perfect deterministic function (plausible stand-in
-        # for "the real world is noisier than the formula").
-        noisy_label = 1 if random.random() < label_prob else 0
 
-        X.append([frames_ahead, dx, half_width, dx / max(half_width, 1.0)])
-        y.append(noisy_label)
-    return np.array(X), np.array(y)
+def load_dataset(path):
+    X, y = [], []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            X.append(row_features(rec))
+            y.append(rec["label"])
+    return np.array(X, dtype=float), np.array(y, dtype=int)
 
 
 def main():
-    X, y = make_dataset(N_SAMPLES)
-    model = LogisticRegression(max_iter=1000)
-    model.fit(X, y)
+    path = sys.argv[1] if len(sys.argv) > 1 else EPISODES_PATH
+    X, y = load_dataset(path)
+    if len(X) < 50:
+        raise SystemExit(
+            f"only {len(X)} labeled rows in {path} - run `node ai-player/collect.js` "
+            "first to generate real self-play data (see README)"
+        )
 
-    train_acc = model.score(X, y)
-    print(f"[train] trained on {N_SAMPLES} synthetic examples, train accuracy={train_acc:.3f}")
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y if len(set(y)) > 1 else None
+    )
+    model = HistGradientBoostingClassifier(max_depth=4, max_iter=200, random_state=42)
+    model.fit(X_train, y_train)
 
-    joblib.dump(model, "ai-player/local-model/model.joblib")
-    print("[train] saved ai-player/local-model/model.joblib")
+    train_acc = model.score(X_train, y_train)
+    test_acc = model.score(X_test, y_test)
+    print(f"[train] {len(X)} labeled rows from real self-play ({y.mean():.1%} labeled safe)")
+    print(f"[train] train accuracy={train_acc:.3f} held-out accuracy={test_acc:.3f}")
 
-    # Sanity check against a few hand-picked cases.
-    checks = [
-        (5, 10, 40),   # close threat, tiny clearance -> should be unsafe
-        (5, 200, 40),  # close threat, huge clearance -> should be safe
-        (50, 10, 40),  # far-off threat, tiny clearance (plenty of time) -> safer
-    ]
-    for frames_ahead, dx, half_width in checks:
-        feat = np.array([[frames_ahead, dx, half_width, dx / half_width]])
-        prob = model.predict_proba(feat)[0][1]
-        print(f"[train] frames_ahead={frames_ahead} dx={dx} half_width={half_width} -> p(safe)={prob:.2f}")
+    joblib.dump(model, MODEL_PATH)
+    print(f"[train] saved {MODEL_PATH}")
 
 
 if __name__ == "__main__":

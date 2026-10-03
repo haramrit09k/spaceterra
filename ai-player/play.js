@@ -12,6 +12,7 @@ const { chromium } = require('playwright');
 const { spawn } = require('child_process');
 const { startHarnessServer, PORT } = require('./harness-server');
 const { callJev } = require('./jev');
+const { readState } = require('./sense');
 
 const LOCAL_MODEL_PORT = 8787;
 const OLLAMA_MODEL_PORT = 8788;
@@ -61,46 +62,6 @@ function parseArgs() {
   // it - same brain, same answers, just the latency a public HTTP API adds.
   const simulateLatencyMs = Number((args.find((a) => a.startsWith('--simulate-latency=')) || '').split('=')[1]) || 0;
   return { seconds, headed, local, ollama, laya, simulateLatencyMs };
-}
-
-// Runs inside the browser page. Pulls the handful of Phaser globals that
-// determine "is the rocket about to hit something", and reduces them to
-// the compact shape jev.js expects - this is the sensor half of the loop.
-function readState() {
-  /* eslint-disable no-undef */
-  const rocketX = rocket.x;
-  const rocketHalfWidth = rocket.width / 2;
-  const rocketY = 500; // rocket.y never changes; see ai-player/README.md
-
-  function collectThreats(group, kind, scrollRate) {
-    const out = [];
-    group.children.forEach((child) => {
-      if (!child.exists) return;
-      const absY = child.y + group.y;
-      const absX = child.x + group.x;
-      const remaining = rocketY - absY; // positive = still incoming
-      if (remaining < -20 || remaining > 600) return; // outside our lookahead window
-      out.push({
-        kind,
-        x: absX,
-        y: remaining,
-        scrollRate, // px/frame this group advances while holding "up"
-        halfWidth: child.width / 2 + rocketHalfWidth,
-      });
-    });
-    return out;
-  }
-
-  return {
-    rocketX,
-    oscIndex,
-    intensity,
-    score,
-    oscIndexNew,
-    threats: [...collectThreats(obstacles, 'obstacle', 15), ...collectThreats(aliens, 'alien', 10)],
-    gameOver: game.state.current === 'gameState3',
-  };
-  /* eslint-enable no-undef */
 }
 
 async function main() {

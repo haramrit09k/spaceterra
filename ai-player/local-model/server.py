@@ -7,31 +7,32 @@ Same request/response contract as the real API (see jev.js's buildRequest):
     { "state": {...}, "questions": [{ "id": "safe_to_advance", ... }] }
     -> { "answers": { "safe_to_advance": 0.87 } }
 
-The only difference from the real Jev call in jev.js is the URL (localhost
-instead of api.typesafe.ai) and what's answering: a tiny scikit-learn
-logistic regression running in-process instead of a hosted model over the
-public internet. That's the whole point of the experiment - same interface,
-radically different latency, because the round trip never leaves the
-machine.
+What answers it is a gradient-boosted tree model (see train.py) trained on
+real self-play outcomes, not a formula. This file deliberately does not know
+gameplay.js's sine-wave constants (390/420) or anything else about how the
+game computes rocket position or obstacle spawns - it only forwards the
+state fields the game already exposes (see sense.js) into the same feature
+vector train.py built its training rows from. If that feature extraction
+ever drifts from train.py's, row_features() is the one place to fix on both
+sides.
 """
 import http.server
 import json
-import math
 import sys
-import time
 
 import joblib
 import numpy as np
 
 MODEL_PATH = "ai-player/local-model/model.joblib"
-AMPLITUDE = 390
-CENTER = 420
 
 
-def predict_future_x(state, frames_ahead):
-    """Mirrors predictFutureX() in jev.js - same sine-wave projection."""
-    future_osc = state["oscIndex"] + frames_ahead
-    return CENTER + AMPLITUDE * math.sin(future_osc / state["intensity"])
+def row_features(state, threat):
+    frames_ahead = threat["y"] / max(threat["scrollRate"], 1e-6)
+    return [
+        state["rocketX"], state["oscIndex"], state["intensity"],
+        threat["x"], threat["y"], threat["scrollRate"], threat["halfWidth"],
+        frames_ahead,
+    ]
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -56,11 +57,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         else:
             worst = 1.0
             for threat in threats:
-                frames_ahead = max(1.0, threat["y"] / threat["scrollRate"])
-                predicted_x = predict_future_x(state, frames_ahead)
-                dx = abs(threat["x"] - predicted_x)
-                half_width = threat["halfWidth"]
-                feat = np.array([[frames_ahead, dx, half_width, dx / max(half_width, 1.0)]])
+                feat = np.array([row_features(state, threat)])
                 p_safe = self.model.predict_proba(feat)[0][1]
                 worst = min(worst, p_safe)
             prob = worst
