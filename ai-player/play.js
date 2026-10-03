@@ -14,27 +14,29 @@ const { startHarnessServer, PORT } = require('./harness-server');
 const { callJev } = require('./jev');
 
 const LOCAL_MODEL_PORT = 8787;
+const OLLAMA_MODEL_PORT = 8788;
+const LAYA_MODEL_PORT = 8789;
 
-// Spawns ai-player/local-model/server.py and waits for it to accept
-// connections. Only used with --local; kept separate from jev.js so jev.js
-// doesn't need to know how its backends get started, just where to send
-// requests (LOCAL_JEV_URL).
-function startLocalModelServer() {
+// Spawns one of ai-player/local-model/{server,ollama_server}.py and waits
+// for it to accept connections. Kept separate from jev.js so jev.js doesn't
+// need to know how its backends get started, just where to send requests
+// (LOCAL_JEV_URL).
+function startLocalModelServer(scriptPath, port, logTag) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('python3', ['ai-player/local-model/server.py', String(LOCAL_MODEL_PORT)], {
+    const proc = spawn('python3', [scriptPath, String(port)], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let settled = false;
     proc.stdout.on('data', (chunk) => {
-      process.stdout.write(`[local-model] ${chunk}`);
+      process.stdout.write(`[${logTag}] ${chunk}`);
       if (!settled && chunk.toString().includes('serving on')) {
         settled = true;
         resolve(proc);
       }
     });
-    proc.stderr.on('data', (chunk) => process.stderr.write(`[local-model] ${chunk}`));
+    proc.stderr.on('data', (chunk) => process.stderr.write(`[${logTag}] ${chunk}`));
     proc.on('exit', (code) => {
-      if (!settled) reject(new Error(`local-model server exited early (code ${code})`));
+      if (!settled) reject(new Error(`${logTag} server exited early (code ${code})`));
     });
   });
 }
@@ -51,12 +53,14 @@ function parseArgs() {
   const seconds = Number((args.find((a) => a.startsWith('--seconds=')) || '').split('=')[1]) || 60;
   const headed = args.includes('--headed');
   const local = args.includes('--local');
+  const ollama = args.includes('--ollama');
+  const laya = args.includes('--laya');
   // Artificially pads every decision with N ms of delay, applied *after*
   // callJev() resolves. Lets us feel what the real Jev API's ~900ms
   // round-trip would do to this game loop without needing network access to
   // it - same brain, same answers, just the latency a public HTTP API adds.
   const simulateLatencyMs = Number((args.find((a) => a.startsWith('--simulate-latency=')) || '').split('=')[1]) || 0;
-  return { seconds, headed, local, simulateLatencyMs };
+  return { seconds, headed, local, ollama, laya, simulateLatencyMs };
 }
 
 // Runs inside the browser page. Pulls the handful of Phaser globals that
@@ -100,13 +104,27 @@ function readState() {
 }
 
 async function main() {
-  const { seconds, headed, local, simulateLatencyMs } = parseArgs();
+  const { seconds, headed, local, ollama, laya, simulateLatencyMs } = parseArgs();
+
+  if ([local, ollama, laya].filter(Boolean).length > 1) {
+    throw new Error('--local, --ollama and --laya are three different brains - pick one');
+  }
 
   let localModelProc = null;
   if (local) {
     console.log('[harness] starting local model server (ai-player/local-model/server.py)');
-    localModelProc = await startLocalModelServer();
+    localModelProc = await startLocalModelServer('ai-player/local-model/server.py', LOCAL_MODEL_PORT, 'local-model');
     process.env.LOCAL_JEV_URL = `http://127.0.0.1:${LOCAL_MODEL_PORT}/v1/systemone`;
+  } else if (ollama) {
+    console.log('[harness] starting ollama bridge (ai-player/local-model/ollama_server.py)');
+    console.log('[harness] (requires `ollama serve` already running with the spaceterra-brain model pulled - see README)');
+    localModelProc = await startLocalModelServer('ai-player/local-model/ollama_server.py', OLLAMA_MODEL_PORT, 'ollama-model');
+    process.env.LOCAL_JEV_URL = `http://127.0.0.1:${OLLAMA_MODEL_PORT}/v1/systemone`;
+  } else if (laya) {
+    console.log('[harness] starting Laya bridge (ai-player/local-model/laya_server.py)');
+    console.log('[harness] (requires `pip install laya` and model weights cached - see README; untested in this sandbox, see README)');
+    localModelProc = await startLocalModelServer('ai-player/local-model/laya_server.py', LAYA_MODEL_PORT, 'laya-model');
+    process.env.LOCAL_JEV_URL = `http://127.0.0.1:${LAYA_MODEL_PORT}/v1/systemone`;
   }
 
   console.log(`[harness] starting static server on port ${PORT}`);
