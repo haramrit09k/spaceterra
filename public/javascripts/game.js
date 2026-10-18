@@ -1,44 +1,35 @@
-/* global Phaser */
+/* global Phaser, States, io */
 var game = new Phaser.Game(900, 768, Phaser.CANVAS);
-var score = 0, music, game, rocket, sky, obstacle, cursors, i, x, y, obstacles, startx;
-var alien, aliens;
-var text1, text;
-var oscIndex = 1;
-var style;
-var scoreText, scoreY = 7;
-var distance = 0;
-var pause_button;
-var fullButton, muteButton;
-var username;
-var statsText;
-var leader;
-var video, button, sprite, logoimg;
-var time, tempY;
-var intensity;
-var blastHim;
-var blast;
-var oscIndexNew = 0;
-var exist = 0;
-var counts = 0;
-var point = 0;
-var seconds, minutes;
-var scaleFactor = [1, 1.1, 1.2, 1.3]; // for obstacles
-var text1, text2, text3, text4, text5, text6, text7, text8, text9;
-var scale1;
+// Run game logic in fixed 1/60 s steps so the game plays at the same speed on
+// 60 Hz, 120 Hz and 144 Hz screens.
+game.forceSingleUpdate = false;
+if (game.time) game.time.desiredFps = 60;
 
-// var url = 'http://localhost:3008'; //dev
-// var url = 'https://spaceterra.herokuapp.com'; //prod
-var url = window.CONFIG.origin;
+var username; // Google display name when signed in, otherwise a guest
+var lastRun; // { score, coins, newBest } handed from gameplay to game over
 
-var socket = io(url, { withCredentials: true });
-if (socket !== undefined) {
-    console.log('Socket connection established...');
-}
+var socket = io(window.CONFIG.origin, { withCredentials: true });
 
 game.state.add('gameState1', States.gameState1);
 game.state.add('gameState2', States.gameState2);
 game.state.add('gameState3', States.gameState3);
 game.state.add('gameState4', States.gameState4);
 game.state.add('gameState5', States.gameState5);
+game.state.add('gameState6', States.gameState6);
 
-game.state.start('gameState1');
+// Canvas text needs the Goldman font loaded before the first screen draws it.
+(function startWhenFontsReady() {
+  var started = false;
+  function start() {
+    if (started) return;
+    started = true;
+    game.state.start('gameState1');
+  }
+  var fonts = typeof document !== 'undefined' && document.fonts;
+  if (fonts && fonts.load) {
+    Promise.all([fonts.load('bold 32px Goldman'), fonts.load('32px Goldman')]).then(start, start);
+    setTimeout(start, 3000);
+  } else {
+    start();
+  }
+})();

@@ -1,114 +1,45 @@
+/* global Phaser, game, socket, UI, Progress */
 (function (global) {
-function preload3() {
+  /************************GAME-OVER PAGE************************/
 
-    game.load.image('backButton', 'assets/home.png');
-    game.load.image('retryButton', 'assets/return.png');
-    game.load.spritesheet('muteButton', 'assets/musicOnOff.png', 100, 100);
-    game.load.spritesheet('fullButton', 'assets/fullScreen.png', 100, 100);
-    game.load.image('background', 'assets/leaderboard2.png');
+  function preload3() {
+    UI.preloadCommon();
+  }
 
-}
+  function create3() {
+    var run = global.lastRun || { score: 0, coins: 0, newBest: false };
+    UI.backdrop();
+    UI.addCornerButtons.call(this);
+    game.input.keyboard.addKey(Phaser.Keyboard.R).onDown.add(global.retry);
 
-function send_score() {
+    UI.text(game.width / 2, 55, 'YOUR SCORE : ' + run.score, 44, UI.YELLOW, 0.5);
+    UI.text(game.width / 2, 105, run.newBest ? 'New personal best!' : 'Best: ' + Progress.best, 24, '#fff', 0.5);
+    var coinLine = UI.text(game.width / 2 + 22, 148, '+' + run.coins + '  (bank: ' + Progress.coins + ')', 26, UI.YELLOW, 0.5);
+    var coin = game.add.sprite(coinLine.x - coinLine.width / 2 - 12, 148, UI.coinTexture());
+    coin.anchor.setTo(1, 0.5);
+    coin.scale.setTo(0.7);
 
-    socket.emit('send_score', {
-        username: username,
-        score: score
-    });
+    var table = UI.leaderboardTable(190, global.username);
+    this.onRecScore = function (response) { table.setEntries(response || []); };
+    socket.on('rec_score', this.onRecScore);
+    // Zero-point runs are not worth a leaderboard row.
+    if (run.score > 0) socket.emit('send_score', { username: global.username, score: run.score });
+    else socket.emit('fetch_score');
 
-}
+    UI.addNavButtons(675, global.back, global.retry);
+  }
 
-function create3() {
+  function update3() {
+    UI.syncCornerButtons();
+  }
 
-    send_score();
-    
-    var onRecScore = function (response) {
-        var j = 0;
-        while (j < response.length && j < 7) {
-            game.add.text(385, 295 + j * 52, response[j].username, { fontSize: '24px', fill: '#FFF' });
-            game.add.text(670, 295 + j * 52, response[j].score, { fontSize: '24px', fill: '#F8E22E' });
-            j++;
-            game.add.text(180, 295 + (j - 1) * 52, j, { fontSize: '24px', fill: '#F8E22E' });
-        }
-    };
-    socket.on('rec_score', onRecScore);
-    this.onRecScore = onRecScore;
-
-    var bg = game.add.sprite(-220, -20, 'background');
-    bg.scale.setTo(0.7, 0.75);
-
-    // obstacles.destroy(true, true);
-    game.scale.scaleMode = Phaser.ScaleManager.SHOW_ALL;
-    game.scale.fullScreenScaleMode = Phaser.ScaleManager.SHOW_ALL;
-    this.game.scale.pageAlignHorizontally = true;
-    this.game.scale.pageAlignVertically = true;
-    this.game.scale.refresh();
-
-    fullButton = game.add.button(70, 90, 'fullButton', goFull, this, 2, 1, 0);
-    fullButton.scale.setTo(0.5, 0.5);
-
-    muteButton = game.add.button(140, 80, 'muteButton', mute, this);
-    muteButton.scale.setTo(0.7, 0.7);
-
-    var mutebutton = game.input.keyboard.addKey(Phaser.Keyboard.M);
-    mutebutton.onDown.add(mute, this);
-
-    var fullbutton = game.input.keyboard.addKey(Phaser.Keyboard.F);
-    fullbutton.onDown.add(goFull, this);
-
-    var retrybutton = game.input.keyboard.addKey(Phaser.Keyboard.R);
-    retrybutton.onDown.add(function () {
-        game.state.start('gameState2');
-    }, this);
-
-    scoreText = game.add.text(game.world.width / 2, 180, 'YOUR SCORE : ' + score, { fontSize: '42px', fill: '#F8E22E' });
-    scoreText.anchor.setTo(0.5, 0.5);
-
-    backButton = game.add.button(300 + 20, 550 + 130 - 10, 'backButton', back, this);
-    backButton.scale.setTo(0.6, 0.6);
-
-    retryButton = game.add.button(480, 550 + 130 - 10, 'retryButton', retry, this);
-    retryButton.scale.setTo(0.6, 0.6);
-
-    text = game.add.text(360, 670 + 80 - 10, 'Main Menu', { fontSize: '24px', fill: '#F8E22E' });
-    text.anchor.setTo(0.5, 0.5);
-
-    text1 = game.add.text(515, 670 + 80 - 10, 'Retry', { fontSize: '24px', fill: '#F8E22E' });
-    text1.anchor.setTo(0.5, 0.5);
-
-}
-
-
-function update3() {
-    if (game.sound.mute) {
-        muteButton.frame = 0;
-    }
-    else {
-        muteButton.frame = 1;
-    }
-
-    if (game.scale.isFullScreen) {
-        fullButton.frame = 1;
-    }
-    else {
-        fullButton.frame = 0;
-    }
-
-}
-
-
-/************************LEADERBOARD PAGE************************/
-
-
-
-global.States = global.States || {};
-global.States.gameState3 = {
+  global.States = global.States || {};
+  global.States.gameState3 = {
     preload: preload3,
     create: create3,
     update: update3,
-    shutdown: function() {
-        socket.off('rec_score', this.onRecScore);
-    }
-};
-
+    shutdown: function () {
+      socket.off('rec_score', this.onRecScore);
+    },
+  };
 })(this);
