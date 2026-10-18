@@ -4,7 +4,7 @@ on:
   pull_request:
     paths: ["android/**", "public/assets/**", "public/media/**", ".github/workflows/android.yml"]
   push:
-    branches: [main]
+    branches: [master]
     paths: ["android/**", "public/assets/**", "public/media/**", ".github/workflows/android.yml"]
     tags: ["android-v*"]
   workflow_dispatch:
