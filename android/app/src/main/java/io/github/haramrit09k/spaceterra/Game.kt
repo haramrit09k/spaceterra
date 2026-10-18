@@ -4,6 +4,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import io.github.haramrit09k.spaceterra.ads.AdsManager
 import io.github.haramrit09k.spaceterra.game.GameWorld
+import io.github.haramrit09k.spaceterra.games.PlayGames
 import io.github.haramrit09k.spaceterra.net.LeaderboardClient
 import io.github.haramrit09k.spaceterra.scenes.MenuScene
 import io.github.haramrit09k.spaceterra.scenes.Scene
@@ -25,6 +26,7 @@ class Game(
     val prefs: Prefs,
     val leaderboard: LeaderboardClient,
     val ads: AdsManager?,
+    val playGames: PlayGames?,
     val host: Host,
     private val density: Float,
 ) {

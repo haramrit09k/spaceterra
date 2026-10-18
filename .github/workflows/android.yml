@@ -1,0 +1,85 @@
+name: Android
+
+on:
+  pull_request:
+    paths: ["android/**", "public/assets/**", "public/media/**", ".github/workflows/android.yml"]
+  push:
+    branches: [main]
+    paths: ["android/**", "public/assets/**", "public/media/**", ".github/workflows/android.yml"]
+    tags: ["android-v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests and lint
+        run: ./gradlew --no-daemon testDebugUnitTest lintRelease
+
+      - name: Debug APK
+        run: ./gradlew --no-daemon assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spaceterra-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+
+  release:
+    # Push a tag like android-v1.0.0 (or run the workflow by hand) to build a
+    # signed bundle for Play Console. Secrets are set under repo Settings >
+    # Secrets and variables > Actions; see android/README.md.
+    if: startsWith(github.ref, 'refs/tags/android-v') || github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    env:
+      ORG_GRADLE_PROJECT_spaceterra.keystoreFile: ${{ github.workspace }}/android/upload.jks
+      ORG_GRADLE_PROJECT_spaceterra.keystorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ORG_GRADLE_PROJECT_spaceterra.keyAlias: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ORG_GRADLE_PROJECT_spaceterra.keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ORG_GRADLE_PROJECT_spaceterra.admobAppId: ${{ secrets.ADMOB_APP_ID }}
+      ORG_GRADLE_PROJECT_spaceterra.admobBannerId: ${{ secrets.ADMOB_BANNER_ID }}
+      ORG_GRADLE_PROJECT_spaceterra.admobInterstitialId: ${{ secrets.ADMOB_INTERSTITIAL_ID }}
+      ORG_GRADLE_PROJECT_spaceterra.admobRewardedId: ${{ secrets.ADMOB_REWARDED_ID }}
+      ORG_GRADLE_PROJECT_spaceterra.versionCode: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Restore upload keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ADMOB_APP_ID: ${{ secrets.ADMOB_APP_ID }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is not set"; exit 1
+          fi
+          # Without real AdMob IDs the release would only ever show test ads.
+          if [ -z "$ADMOB_APP_ID" ]; then
+            echo "::error::ADMOB_APP_ID secret is not set"; exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > upload.jks
+
+      - name: Signed release bundle
+        run: ./gradlew --no-daemon bundleRelease
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spaceterra-release-aab
+          path: android/app/build/outputs/bundle/release/*.aab

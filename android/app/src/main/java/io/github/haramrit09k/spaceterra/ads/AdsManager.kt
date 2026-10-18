@@ -24,8 +24,8 @@ import io.github.haramrit09k.spaceterra.BuildConfig
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * AdMob integration: a banner on menu screens, an occasional interstitial
- * between runs, and an opt-in rewarded ad that lets the player continue a run.
+ * AdMob integration: a banner on menu screens only, a rare interstitial between
+ * runs (see [AdPacing]), and opt-in rewarded ads (continue a run, double coins).
  *
  * Consent (GDPR / US state privacy laws) is collected through Google's User
  * Messaging Platform before any ad is requested.
@@ -112,6 +112,7 @@ class AdsManager(
         rewarded = null
         rewardedReady = false
         var earned = false
+        pacing.recordRewardedShown()
         ad.fullScreenContentCallback = fullScreenCallback(
             onClosed = {
                 loadRewarded()

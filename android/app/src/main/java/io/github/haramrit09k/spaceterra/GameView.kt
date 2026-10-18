@@ -2,6 +2,7 @@ package io.github.haramrit09k.spaceterra
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.os.Build
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -99,7 +100,9 @@ class GameView(context: Context, private val game: Game) : SurfaceView(context),
             }
             if (steps == MAX_STEPS) lag = 0
 
-            val canvas = runCatching { holder.lockHardwareCanvas() }.getOrNull()
+            val canvas = runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) holder.lockHardwareCanvas() else holder.lockCanvas()
+            }.getOrNull()
             if (canvas == null) {
                 runCatching { Thread.sleep(16) }
                 continue

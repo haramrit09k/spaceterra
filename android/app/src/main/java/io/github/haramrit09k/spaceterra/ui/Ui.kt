@@ -10,10 +10,18 @@ import android.graphics.Typeface
 
 const val YELLOW = 0xFFF8E22E.toInt()
 
-private val boldFace: Typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+/**
+ * The game's one font family. Goldman (SIL OFL) is the closest openly licensed
+ * match to SF Distant Galaxy, the font used in the original button art.
+ * [io.github.haramrit09k.spaceterra.Assets] loads the real files at startup.
+ */
+object Fonts {
+    var bold: Typeface = Typeface.DEFAULT_BOLD
+    var regular: Typeface = Typeface.DEFAULT
+}
 
 val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-    typeface = boldFace
+    typeface = Fonts.bold
     setShadowLayer(4f, 0f, 2f, 0xCC000000.toInt())
 }
 
@@ -28,7 +36,9 @@ fun Canvas.text(
     size: Float,
     color: Int = YELLOW,
     align: Paint.Align = Paint.Align.LEFT,
+    bold: Boolean = true,
 ) {
+    textPaint.typeface = if (bold) Fonts.bold else Fonts.regular
     textPaint.textSize = size
     textPaint.color = color
     textPaint.textAlign = align
@@ -37,16 +47,16 @@ fun Canvas.text(
 
 /** Draws [value] word-wrapped to [maxWidth]; returns the y below the last line. */
 fun Canvas.paragraph(value: String, x: Float, y: Float, maxWidth: Float, size: Float, color: Int = YELLOW): Float {
-    textPaint.textSize = size
     var lineY = y
-    for (line in wrap(value, maxWidth, size)) {
-        text(line, x, lineY, size, color)
+    for (line in wrap(value, maxWidth, size, bold = false)) {
+        text(line, x, lineY, size, color, bold = false)
         lineY += size * 1.25f
     }
     return lineY
 }
 
-fun wrap(value: String, maxWidth: Float, size: Float): List<String> {
+fun wrap(value: String, maxWidth: Float, size: Float, bold: Boolean = true): List<String> {
+    textPaint.typeface = if (bold) Fonts.bold else Fonts.regular
     textPaint.textSize = size
     val lines = mutableListOf<String>()
     var current = ""
@@ -64,6 +74,7 @@ fun wrap(value: String, maxWidth: Float, size: Float): List<String> {
 }
 
 fun ellipsize(value: String, maxWidth: Float, size: Float): String {
+    textPaint.typeface = Fonts.bold
     textPaint.textSize = size
     if (textPaint.measureText(value) <= maxWidth) return value
     val count = textPaint.breakText(value, true, maxWidth - textPaint.measureText("…"), null)
@@ -135,12 +146,16 @@ class Button(
         fun image(bounds: RectF, bmp: Bitmap, onClick: () -> Unit) =
             Button(bounds, { b, _ -> bitmap(bmp, null, b) }, onClick)
 
-        /** A rounded yellow pill matching the START / LEADERBOARD art. */
+        /** A rounded yellow pill in the style of the original START / LEADERBOARD art. */
         fun pill(bounds: RectF, label: () -> String, size: Float = 34f, onClick: () -> Unit) =
             Button(bounds, { b, pressed ->
-                panel(b, if (pressed) 0xFFE0C820.toInt() else YELLOW, 0xFFD8402A.toInt(), 5f, b.height() / 4)
+                panel(b, if (pressed) 0xFFE0C820.toInt() else YELLOW, 0xFFE8231B.toInt(), b.height() * 0.07f, b.height() / 4)
+                val text = label()
+                textPaint.typeface = Fonts.bold
+                textPaint.textSize = size
+                val fitted = size * minOf(1f, (b.width() - 50f) / textPaint.measureText(text))
                 textPaint.setShadowLayer(0f, 0f, 0f, 0)
-                text(label(), b.centerX(), b.centerY() + size * 0.36f, size, Color.BLACK, Paint.Align.CENTER)
+                text(text, b.centerX(), b.centerY() + fitted * 0.36f, fitted, Color.BLACK, Paint.Align.CENTER)
                 textPaint.setShadowLayer(4f, 0f, 2f, 0xCC000000.toInt())
             }, onClick)
 

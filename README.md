@@ -35,6 +35,13 @@ Client-side game logic now lives in modular files under
 
 ---
 
+## Android app
+A native Android version (Kotlin, no WebView) lives in [`android/`](android/README.md). It shares
+the art, audio and leaderboard with the web game and adds coins, power-ups, a Hangar and
+Google Play Games. The web game and server are unaffected by it.
+
+---
+
 ## Features  
 - 🎮 Smooth oscillating rocket movement  
 - 🌠 Procedurally generated obstacles  

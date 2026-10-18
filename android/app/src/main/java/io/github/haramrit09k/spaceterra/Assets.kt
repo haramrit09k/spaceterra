@@ -1,9 +1,12 @@
 package io.github.haramrit09k.spaceterra
 
+import android.content.Context
 import android.content.res.AssetManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Rect
+import androidx.core.content.res.ResourcesCompat
+import io.github.haramrit09k.spaceterra.ui.Fonts
 
 /** A sprite sheet laid out like Phaser's: equal frames, left to right, top to bottom. */
 class Sheet(val bitmap: Bitmap, private val frameW: Int, private val frameH: Int) {
@@ -19,7 +22,14 @@ class Sheet(val bitmap: Bitmap, private val frameW: Int, private val frameH: Int
 }
 
 /** Game art copied from public/assets at build time (see syncGameAssets in app/build.gradle.kts). */
-class Assets(assets: AssetManager) {
+class Assets(context: Context) {
+    init {
+        ResourcesCompat.getFont(context, R.font.goldman_bold)?.let { Fonts.bold = it }
+        ResourcesCompat.getFont(context, R.font.goldman_regular)?.let { Fonts.regular = it }
+    }
+
+    private val assets = context.assets
+
     private fun load(am: AssetManager, name: String): Bitmap =
         am.open("img/$name").use { BitmapFactory.decodeStream(it) }
             ?: error("Missing game asset img/$name")
@@ -27,9 +37,6 @@ class Assets(assets: AssetManager) {
     val menuBackground = load(assets, "SKYRED.PNG")
     val sky = load(assets, "sky5.jpg")
     val logo = load(assets, "logo.png")
-    val startButton = load(assets, "buttons/START.png")
-    val instructionsButton = load(assets, "buttons/INSTRUCTIONS.png")
-    val leaderboardButton = load(assets, "buttons/LEADERBOARD.png")
     val home = load(assets, "home.png")
     val retry = load(assets, "return.png")
     val pause = load(assets, "pause.png")

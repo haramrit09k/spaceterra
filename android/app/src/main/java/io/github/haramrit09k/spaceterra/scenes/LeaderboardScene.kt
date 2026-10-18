@@ -20,6 +20,11 @@ class LeaderboardScene(game: Game) : Scene(game) {
         addMuteButton()
         val usable = game.height - game.bannerReserve
         top = maxOf(game.safeTop + 110f, (usable - CONTENT_H) / 2)
+        game.playGames?.takeIf { it.enabled }?.let { pg ->
+            buttons += Button.pill(rect(200f, top + 160f + LeaderboardTable.HEIGHT, 500f, 80f), { "Play Games leaderboard" }, 32f) {
+                pg.showLeaderboard()
+            }
+        }
         buttons += Button.image(rect(400f, top + CONTENT_H - 150f, 100f, 100f), game.assets.home) { game.go(MenuScene(game)) }
     }
 
@@ -32,6 +37,6 @@ class LeaderboardScene(game: Game) : Scene(game) {
     }
 
     private companion object {
-        val CONTENT_H = 140f + LeaderboardTable.HEIGHT + 220f
+        val CONTENT_H = 140f + LeaderboardTable.HEIGHT + 330f
     }
 }

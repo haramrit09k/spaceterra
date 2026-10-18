@@ -4,5 +4,4 @@
     <string name="pilot_name_title">Pilot name</string>
     <string name="pilot_name_message">This name appears on the global leaderboard.</string>
     <string name="pilot_name_save">Save</string>
-    <string name="pilot_name_cancel">Cancel</string>
 </resources>

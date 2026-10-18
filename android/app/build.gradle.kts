@@ -1,3 +1,4 @@
+import java.util.Properties
 import javax.inject.Inject
 
 plugins {
@@ -19,6 +20,17 @@ fun propOr(name: String, fallback: String): String = prop(name).ifEmpty { fallba
 
 fun quoted(value: String) = "\"" + value.replace("\"", "\\\"") + "\""
 
+// Play Games Services IDs live in a checked-in file because they are public.
+val playGamesIds = Properties().apply {
+    val file = rootProject.file("play-games.properties")
+    if (file.exists()) file.reader().use { load(it) }
+}
+val playGamesKeys = listOf(
+    "leaderboard_high_score", "achievement_first_flight", "achievement_score_100",
+    "achievement_score_250", "achievement_score_500", "achievement_score_1000",
+    "achievement_shield_save", "achievement_coins_1000", "achievement_fully_upgraded",
+)
+
 android {
     namespace = "io.github.haramrit09k.spaceterra"
     compileSdk = 36
@@ -29,6 +41,9 @@ android {
         targetSdk = 36
         versionCode = propOr("versionCode", "1").toInt()
         versionName = propOr("versionName", "1.0.0")
+
+        resValue("string", "game_services_project_id", playGamesIds.getProperty("app_id", "").trim())
+        playGamesKeys.forEach { key -> resValue("string", "pgs_$key", playGamesIds.getProperty(key, "").trim()) }
 
         buildConfigField("String", "SERVER_URL", quoted(propOr("serverUrl", "https://spaceterra.herokuapp.com")))
     }
@@ -69,6 +84,7 @@ android {
 
     buildFeatures {
         buildConfig = true
+        resValues = true
     }
 
     compileOptions {
@@ -113,7 +129,6 @@ abstract class SyncGameAssets : DefaultTask() {
                     "SKYRED.PNG", "Space Terra LOGO4.png", "alien_spritesheet.png", "asteroid1.png",
                     "flame_hit.png", "finger-tap-sp.png", "home.png", "return.png", "musicOnOff.png",
                     "pause.png", "spaceship1.png", "sky5.jpg",
-                    "buttons/START.png", "buttons/INSTRUCTIONS.png", "buttons/LEADERBOARD.png",
                 )
                 rename("Space Terra LOGO4.png", "logo.png")
                 into("img")
@@ -144,6 +159,7 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.11.0")
     implementation("com.google.android.gms:play-services-ads:24.7.0")
     implementation("com.google.android.ump:user-messaging-platform:3.2.0")
+    implementation("com.google.android.gms:play-services-games-v2:21.0.0")
     implementation("io.socket:socket.io-client:2.1.2") {
         // Android ships its own org.json.
         exclude(group = "org.json", module = "json")
@@ -151,4 +167,5 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("androidx.test:core-ktx:1.7.0")
 }

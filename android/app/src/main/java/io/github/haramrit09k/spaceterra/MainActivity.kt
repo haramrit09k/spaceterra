@@ -16,6 +16,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import io.github.haramrit09k.spaceterra.ads.AdsManager
+import io.github.haramrit09k.spaceterra.games.PlayGames
 import io.github.haramrit09k.spaceterra.net.LeaderboardClient
 import kotlin.random.Random
 
@@ -25,6 +26,7 @@ class MainActivity : ComponentActivity(), Host {
     private lateinit var audio: Audio
     private lateinit var leaderboard: LeaderboardClient
     private lateinit var ads: AdsManager
+    private lateinit var playGames: PlayGames
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,7 +40,8 @@ class MainActivity : ComponentActivity(), Host {
         val bannerContainer = FrameLayout(this).apply { visibility = View.GONE }
         ads = AdsManager(this, bannerContainer) { showing -> audio.setSuspended(showing) }
 
-        game = Game(Assets(assets), audio, prefs, leaderboard, ads, this, resources.displayMetrics.density)
+        playGames = PlayGames(this)
+        game = Game(Assets(this), audio, prefs, leaderboard, ads, playGames, this, resources.displayMetrics.density)
         gameView = GameView(this, game)
         root.addView(gameView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         root.addView(bannerContainer, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
@@ -58,6 +61,8 @@ class MainActivity : ComponentActivity(), Host {
         hideSystemBars()
         leaderboard.connect()
         ads.start()
+        // A Play Games name becomes the pilot name unless the player picked one.
+        playGames.checkSignIn { name -> game.post { if (prefs.playerName == null) prefs.playerName = name } }
     }
 
     override fun onResume() {
