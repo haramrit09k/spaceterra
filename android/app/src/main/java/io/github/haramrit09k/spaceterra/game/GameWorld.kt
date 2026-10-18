@@ -112,7 +112,7 @@ class GameWorld(
             advanceSpawnCursor()
         }
         // A first coin trail high up so new players see what to chase.
-        addCoinTrail(spawnY + 900f)
+        addCoinPattern(CoinPattern.LINE, spawnY + 900f)
         nextAlienY = rng.range(-2000, -1000).toFloat()
         topUpAliens()
         updateOscillation()
@@ -293,7 +293,7 @@ class GameWorld(
             advanceSpawnCursor()
             addRock(rng.range(0, 64) % ROCK_FRAMES)
         }
-        if (rng.nextFloat() < COIN_TRAIL_CHANCE) addCoinTrail(bandBottom)
+        if (rng.nextFloat() < COIN_TRAIL_CHANCE) addCoinPattern(CoinPattern.pick(rng.nextFloat()), bandBottom)
         if (rng.nextFloat() < POWER_UP_CHANCE) {
             val kind = PowerUp.entries[rng.nextInt(PowerUp.entries.size)]
             val x = rng.range(60, 790).toFloat()
@@ -302,11 +302,17 @@ class GameWorld(
         }
     }
 
-    /** A vertical line of coins starting just above [bottom], skipping spots blocked by rocks. */
-    private fun addCoinTrail(bottom: Float) {
-        val x = rng.range(60, 800).toFloat()
-        for (i in 0 until COINS_PER_TRAIL) {
-            val y = bottom - i * COIN_SPACING
+    /**
+     * Lays out [pattern] with its bottom at [bottom], at a random x where the
+     * whole shape fits on screen, skipping coins that would sit on a rock.
+     */
+    fun addCoinPattern(pattern: CoinPattern, bottom: Float, originX: Float? = null) {
+        val left = COIN_MARGIN - pattern.minX
+        val right = width - COIN_MARGIN - COIN_SIZE - pattern.maxX
+        val x0 = originX ?: rng.range(left.toInt(), maxOf(left, right).toInt()).toFloat()
+        for ((dx, dy) in pattern.offsets) {
+            val x = x0 + dx
+            val y = bottom + dy
             if (isClear(x, y, COIN_SIZE)) pickups += Pickup(x, y, null)
         }
     }
@@ -383,8 +389,7 @@ class GameWorld(
 
         const val COIN_TRAIL_CHANCE = 0.6f
         const val POWER_UP_CHANCE = 0.12f
-        const val COINS_PER_TRAIL = 5
-        const val COIN_SPACING = 70f
+        const val COIN_MARGIN = 40f
         const val MAGNET_RADIUS = 320f
         const val MAGNET_PULL = 14f
 

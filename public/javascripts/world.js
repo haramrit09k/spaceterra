@@ -53,8 +53,7 @@
 
     COIN_TRAIL_CHANCE: 0.6,
     POWER_UP_CHANCE: 0.12,
-    COINS_PER_TRAIL: 5,
-    COIN_SPACING: 70,
+    COIN_MARGIN: 40,
     MAGNET_RADIUS: 320,
     MAGNET_PULL: 14,
 
@@ -65,6 +64,58 @@
   };
 
   var ROCK_SCALES = [1, 1.1, 1.2, 1.3];
+
+  function times(n, fn) {
+    var out = [];
+    for (var i = 0; i < n; i++) out.push(fn(i));
+    return out;
+  }
+
+  /**
+   * Shapes coins are laid out in, as [dx, dy] offsets from the bottom anchor
+   * (negative dy is further ahead). Mirrors CoinPattern.kt in the Android app.
+   */
+  var COIN_PATTERNS = {
+    LINE: { weight: 2, offsets: times(5, function (i) { return [0, -70 * i]; }) },
+    // Follows the rocket's own swing: time the thrust to collect it all.
+    WAVE: { weight: 1, offsets: times(9, function (i) { return [110 * Math.sin(i * Math.PI / 4), -60 * i]; }) },
+    ZIGZAG: { weight: 1, offsets: [0, 1, 2, 1, 0, 1, 2, 1, 0].map(function (step, i) { return [75 * step, -60 * i]; }) },
+    DIAMOND: { weight: 1, offsets: [[0, 0], [55, -60], [110, -120], [55, -180], [0, -240], [-55, -180], [-110, -120], [-55, -60]] },
+    RING: {
+      weight: 1,
+      offsets: times(10, function (i) {
+        var a = i * 2 * Math.PI / 10;
+        return [100 * Math.cos(a), -100 - 100 * Math.sin(a)];
+      }),
+    },
+    // A rainbow arc, open towards the rocket.
+    ARC: {
+      weight: 1,
+      offsets: times(7, function (i) {
+        var a = Math.PI - i * Math.PI / 6;
+        return [140 * Math.cos(a), -140 * Math.sin(a)];
+      }),
+    },
+    // An arrowhead pointing the way forward.
+    CHEVRON: { weight: 1, offsets: times(7, function (i) { return [-120 + 40 * i, -40 * (3 - Math.abs(i - 3))]; }) },
+  };
+  var PATTERN_NAMES = Object.keys(COIN_PATTERNS);
+  PATTERN_NAMES.forEach(function (name) {
+    var p = COIN_PATTERNS[name];
+    p.minX = Math.min.apply(null, p.offsets.map(function (o) { return o[0]; }));
+    p.maxX = Math.max.apply(null, p.offsets.map(function (o) { return o[0]; }));
+  });
+  var PATTERN_WEIGHT = PATTERN_NAMES.reduce(function (sum, n) { return sum + COIN_PATTERNS[n].weight; }, 0);
+
+  /** Picks a shape for a roll in [0, 1), weighted so straight lines stay the most common. */
+  function pickPattern(roll) {
+    var r = roll * PATTERN_WEIGHT;
+    for (var i = 0; i < PATTERN_NAMES.length; i++) {
+      r -= COIN_PATTERNS[PATTERN_NAMES[i]].weight;
+      if (r < 0) return PATTERN_NAMES[i];
+    }
+    return PATTERN_NAMES[PATTERN_NAMES.length - 1];
+  }
   var POWER_UPS = ['SHIELD', 'MAGNET', 'DOUBLE_COINS'];
 
   function overlaps(a, b) {
@@ -126,7 +177,7 @@
       this._advanceSpawnCursor();
     }
     // A first coin trail high up so new players see what to chase.
-    this._addCoinTrail(this._spawnY + 900);
+    this.addCoinPattern('LINE', this._spawnY + 900);
     this._nextAlienY = this._range(-2000, -1000);
     this._topUpAliens();
     this._updateOscillation();
@@ -316,7 +367,7 @@
         this._advanceSpawnCursor();
         this._addRock(this._range(0, 64) % C.ROCK_FRAMES);
       }
-      if (this.random() < C.COIN_TRAIL_CHANCE) this._addCoinTrail(bandBottom);
+      if (this.random() < C.COIN_TRAIL_CHANCE) this.addCoinPattern(pickPattern(this.random()), bandBottom);
       if (this.random() < C.POWER_UP_CHANCE) {
         var kind = POWER_UPS[Math.floor(this.random() * POWER_UPS.length)];
         var x = this._range(60, 790);
@@ -325,10 +376,18 @@
       }
     },
 
-    _addCoinTrail: function (bottom) {
-      var x = this._range(60, 800);
-      for (var i = 0; i < C.COINS_PER_TRAIL; i++) {
-        var y = bottom - i * C.COIN_SPACING;
+    /**
+     * Lays out a coin pattern with its bottom at `bottom`, at a random x where
+     * the whole shape fits on screen, skipping coins that would sit on a rock.
+     */
+    addCoinPattern: function (name, bottom, originX) {
+      var pattern = COIN_PATTERNS[name];
+      var left = C.COIN_MARGIN - pattern.minX;
+      var right = this.width - C.COIN_MARGIN - C.COIN_SIZE - pattern.maxX;
+      var x0 = originX != null ? originX : this._range(Math.floor(left), Math.floor(Math.max(left, right)));
+      for (var i = 0; i < pattern.offsets.length; i++) {
+        var x = x0 + pattern.offsets[i][0];
+        var y = bottom + pattern.offsets[i][1];
         if (this._isClear(x, y, C.COIN_SIZE)) this.pickups.push({ x: x, y: y, powerUp: null });
       }
     },
@@ -387,5 +446,13 @@
     description: { SHIELD: 'Absorbs one hit', MAGNET: 'Pulls nearby coins in', DOUBLE_COINS: 'Every coin counts twice' },
   };
 
-  return { GameWorld: GameWorld, Upgrades: Upgrades, POWER_UPS: POWER_UPS, C: C, overlaps: overlaps };
+  return {
+    GameWorld: GameWorld,
+    Upgrades: Upgrades,
+    POWER_UPS: POWER_UPS,
+    COIN_PATTERNS: COIN_PATTERNS,
+    pickPattern: pickPattern,
+    C: C,
+    overlaps: overlaps,
+  };
 });
