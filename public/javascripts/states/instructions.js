@@ -1,103 +1,71 @@
+/* global game, UI */
 (function (global) {
-function preload5() {
-    game.load.video('video', 'assets/video/demo1.mp4');
+  /************************INSTRUCTIONS PAGE************************/
 
-    game.load.spritesheet('key', 'assets/keyys.png', 96, 103);
+  function preload5() {
+    UI.preloadCommon();
+    game.load.spritesheet('rocket', 'assets/spaceship1.png', 100, 150);
+    game.load.spritesheet('ast', 'assets/asteroid1.png', 72, 70);
     game.load.spritesheet('alien', 'assets/alien_spritesheet.png', 278, 275);
-
-    game.load.image('backButton', 'assets/home.png');
-    game.load.image('p', 'assets/pimage.png');
-    game.load.image('r', 'assets/rimage.png');
-    game.load.image('f', 'assets/fimage.png');
-    game.load.image('m', 'assets/mimage.png');
-    game.load.image('background', 'assets/SKYRED.PNG');
-    game.load.image('tap-mobile', 'assets/tap-mobile.png');
     game.load.spritesheet('tap-mobile', 'assets/finger-tap-sp.png', 782, 998);
-}
+  }
 
-function create5() {
-    var bg = game.add.sprite(-220, -20, 'background');
-    bg.scale.setTo(0.7, 0.75);
+  function line(y, value) {
+    var t = game.add.text(230, y, value, UI.style(21, UI.YELLOW, false));
+    t.anchor.setTo(0, 0.5);
+    t.wordWrap = true;
+    t.wordWrapWidth = 600;
+    return t;
+  }
 
-    text2 = game.add.text(320, 30, 'INSTRUCTIONS\n', { font: 'bold 48px Impact', fill: '#F8E22E' });
+  function create5() {
+    UI.backdrop(0.35);
+    UI.addCornerButtons.call(this);
+    UI.text(game.width / 2, 60, 'HOW TO PLAY', 48, UI.YELLOW, 0.5);
 
-    text3 = game.add.text(420, 140, 'Help the oscillating rocket move ahead by avoiding\n collision with the obstacles', { font: ' 28px Rockwell', fill: '#F8E22E' });
-    text3.anchor.setTo(0.5, 0.5);
+    var rocket = game.add.sprite(130, 178, 'rocket', 3);
+    rocket.anchor.setTo(0.5, 0.5);
+    rocket.scale.setTo(0.45);
+    line(178, 'Your rocket swings from side to side on its own. Steer through the gaps.');
 
-    var key = game.add.sprite(110, 185, 'key');
-    key.scale.setTo(0.7, 0.7);
-    var anim = key.animations.add('anim');
-    key.animations.play('anim', 1, true);
+    var finger = game.add.sprite(130, 256, 'tap-mobile');
+    finger.anchor.setTo(0.5, 0.5);
+    finger.scale.setTo(0.075);
+    finger.animations.add('tap');
+    finger.animations.play('tap', 1, true);
+    line(256, 'Hold the UP arrow or SPACE to fly forward. On phones, touch and hold.');
 
-    text4 = game.add.text(285, 190, 'For upward motion of rocket, press UP \narrow key', { font: ' 28px Rockwell', fill: '#F8E22E' });
-    text42 = game.add.text(430, 235, '(OR touch and hold for mobile devices)', { font: ' 20px Rockwell', fill: '#F8E22E' });
+    var rock = game.add.sprite(105, 334, 'ast', 2);
+    rock.anchor.setTo(0.5, 0.5);
+    rock.scale.setTo(0.8);
+    var alien = game.add.sprite(160, 334, 'alien');
+    alien.anchor.setTo(0.5, 0.5);
+    alien.scale.setTo(0.22);
+    alien.animations.add('spin', [0, 1, 2], 10, true);
+    alien.animations.play('spin');
+    line(334, 'Dodge the asteroids and beware of the aliens! You get faster the further you fly.');
 
-    var tap_mobile = game.add.sprite(750, 270, 'tap-mobile');
-    tap_mobile.scale.setTo(0.08, 0.08);
-    var finger_anim = tap_mobile.animations.add('finger_anim');
-    tap_mobile.animations.play('finger_anim', 1, true);
+    var coin = game.add.sprite(130, 412, UI.coinTexture());
+    coin.anchor.setTo(0.5, 0.5);
+    line(412, 'Grab coins and spend them in the Hangar, or to keep flying after a crash.');
 
-    video = game.add.video('video');
-    video.addToWorld(10, 285 + 19, 0, 0, 0.095, 0.14);
-    // video.scale.setTo(0.3,0.3);
-    video.play(true);
-    video.loop = true;
+    ['SHIELD', 'MAGNET', 'DOUBLE_COINS'].forEach(function (kind, i) {
+      var icon = game.add.sprite(85 + i * 45, 490, UI.powerUpTexture(kind));
+      icon.anchor.setTo(0.5, 0.5);
+      icon.scale.setTo(0.65);
+    });
+    line(490, 'Power-ups: a shield that takes one hit, a coin magnet and 2x coins.');
 
-    text5 = game.add.text(290, 280 + 10, 'If the rocket remains\ninactive for two oscillations\nwithout moving forward,the rocket\nexplodes', { font: ' 28px Rockwell', fill: '#F8E22E' });
+    line(566, 'Stay still for 5 seconds and the rocket explodes.');
+    UI.text(game.width / 2, 625, 'P pause    F fullscreen    M mute    R retry', 22, '#fff', 0.5);
 
-    backButton = game.add.button(400, 665, 'backButton', back, this);
-    backButton.scale.setTo(0.7, 0.7);
+    UI.addNavButtons(690, global.back);
+  }
 
-    var text99 = game.add.text(430, 670 + 75, 'Main Menu', { fontSize: '24px', fill: '#F8E22E' });
-    text99.anchor.setTo(0.5, 0.5);
-
-    aliens = game.add.group();
-    var alien2 = aliens.create(120, 440 + 15, 'alien');
-    alien2.scale.setTo(0.25, 0.25);
-    aliens.callAll('animations.add', 'animations', 'spin', [0, 1, 2], 10, true);
-    aliens.callAll('animations.play', 'animations', 'spin');
-
-    text6 = game.add.text(290, 470, 'Beware of the aliens', { font: ' 32px Rockwell', fill: '#F8E22E' });
-
-    text7 = game.add.text(340, 530 - 10, 'HOTKEYS', { font: 'bold 32px Rockwell', fill: ' #ff0000' });
-
-    var p = game.add.sprite(120, 570 - 10, 'p');
-    p.scale.setTo(0.4, 0.4);
-
-    text8 = game.add.text(180, 580 - 10, ': PAUSE', { font: '28px Rockwell', fill: '#F8E22E' });
-
-    var f = game.add.sprite(120, 630 - 10, 'f');
-    f.scale.setTo(0.4, 0.4);
-
-    text9 = game.add.text(180, 640 - 10, ': TOGGLE FULLSCREEN', { font: '28px Rockwell', fill: '#F8E22E' });
-
-    var r = game.add.sprite(540, 570 - 10, 'r');
-    r.scale.setTo(0.4, 0.4);
-
-    var text10 = game.add.text(600, 580 - 10, ': RETRY', { font: '28px Rockwell', fill: '#F8E22E' });
-
-    var m = game.add.sprite(540, 630 - 10, 'm');
-    m.scale.setTo(0.4, 0.4);
-
-    var text11 = game.add.text(600, 640 - 10, ': TOGGLE MUTE', { font: '28px Rockwell', fill: '#F8E22E' });
-
-    var mutebutton = game.input.keyboard.addKey(Phaser.Keyboard.M);
-    mutebutton.onDown.add(mute, this);
-
-    var fullbutton = game.input.keyboard.addKey(Phaser.Keyboard.F);
-    fullbutton.onDown.add(goFull, this);
-
-}
-
-function update5() {
-
-}
-
-global.States = global.States || {};
-global.States.gameState5 = {
+  global.States = global.States || {};
+  global.States.gameState5 = {
     preload: preload5,
     create: create5,
-    update: update5
-};
-
+    update: function () { UI.syncCornerButtons(); },
+  };
 })(this);

@@ -4,12 +4,16 @@ const vm = require('vm');
 
 function loadGame() {
   const files = [
+    '../public/javascripts/world.js',
+    '../public/javascripts/progress.js',
+    '../public/javascripts/ui.js',
     '../public/javascripts/utils.js',
     '../public/javascripts/states/landing.js',
     '../public/javascripts/states/gameplay.js',
     '../public/javascripts/states/gameover.js',
     '../public/javascripts/states/leaderboard.js',
     '../public/javascripts/states/instructions.js',
+    '../public/javascripts/states/hangar.js',
     '../public/javascripts/game.js'
   ];
   const context = {
@@ -61,4 +65,7 @@ test('game states are defined', () => {
   expect(ctx.States.gameState3).toBeDefined();
   expect(ctx.States.gameState4).toBeDefined();
   expect(ctx.States.gameState5).toBeDefined();
+  expect(ctx.States.gameState6).toBeDefined();
+  expect(ctx.SpaceTerraWorld.GameWorld).toBeDefined();
+  expect(ctx.Progress.coins).toBe(0);
 });

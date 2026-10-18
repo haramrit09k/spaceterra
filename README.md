@@ -35,6 +35,26 @@ Client-side game logic now lives in modular files under
 
 ---
 
+## Saved progress
+Coins, best score and Hangar upgrades are kept in the browser for guests. For players signed in
+with Google they are saved in the `progress` collection (one document per account, created on
+first save, no migration needed) through `GET/PUT /api/progress` and `POST /api/progress/link`.
+
+Run the tests, including the one against a real MongoDB, with:
+
+```bash
+MONGODB_TEST_URI=mongodb://127.0.0.1:27017 npx jest
+```
+
+---
+
+## Android app
+A native Android version (Kotlin, no WebView) lives in [`android/`](android/README.md). It shares
+the art, audio and leaderboard with the web game and adds coins, power-ups, a Hangar and
+Google Play Games. The web game and server are unaffected by it.
+
+---
+
 ## Features  
 - 🎮 Smooth oscillating rocket movement  
 - 🌠 Procedurally generated obstacles  
