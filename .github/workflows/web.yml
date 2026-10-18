@@ -1,0 +1,27 @@
+name: Web
+
+on:
+  pull_request:
+    paths-ignore: ["android/**", ".github/workflows/android.yml"]
+  push:
+    branches: [master]
+    paths-ignore: ["android/**", ".github/workflows/android.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:8.0
+        ports: ["27017:27017"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - name: Jest (including the MongoDB progress test)
+        run: npx jest
+        env:
+          MONGODB_TEST_URI: mongodb://127.0.0.1:27017
