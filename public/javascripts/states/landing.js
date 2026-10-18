@@ -4,6 +4,8 @@
 
   var music;
   var accountItems = [];
+  var progressListener = false;
+  var refreshProgress = null;
 
   function preload1() {
     UI.preloadCommon();
@@ -41,8 +43,21 @@
     var coinIcon = game.add.sprite(game.width - 40, game.height - 40, UI.coinTexture());
     coinIcon.anchor.setTo(1, 0.5);
     coinIcon.scale.setTo(0.7);
-    UI.text(game.width - 80, game.height - 40, String(Progress.coins), 24, UI.YELLOW, 1);
-    if (Progress.best > 0) UI.text(game.width - 40, game.height - 80, 'Your best: ' + Progress.best, 22, UI.YELLOW, 1);
+    var coinText = UI.text(game.width - 80, game.height - 40, '', 24, UI.YELLOW, 1);
+    var bestText = UI.text(game.width - 40, game.height - 80, '', 22, UI.YELLOW, 1);
+    var syncText = UI.text(game.width - 30, 132, '', 16, '#fff', 1, false);
+    function showProgress() {
+      if (game.state.current !== 'gameState1') return;
+      coinText.text = String(Progress.coins);
+      bestText.text = Progress.best > 0 ? 'Your best: ' + Progress.best : '';
+      syncText.text = Progress.synced ? 'Saved to your account' : '';
+    }
+    showProgress();
+    if (!progressListener) {
+      progressListener = true;
+      Progress.onChange(function () { if (refreshProgress) refreshProgress(); });
+    }
+    refreshProgress = showProgress;
 
     showAccount(this);
   }
@@ -62,6 +77,7 @@
           return;
         }
         global.username = data.user.displayName || data.user.email;
+        Progress.useAccount();
         var firstName = global.username.split(' ')[0];
         var hello = UI.text(game.width - 30, 35, 'Hi, ' + firstName, 24, UI.YELLOW, 1);
         accountItems.push(hello);

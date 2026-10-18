@@ -26,10 +26,14 @@
       to the Space Terra server and stored in its database. The top scores are shown publicly to every player,
       so do not use your real name or any personal information as a pilot name.</li>
     <li><strong>On your device.</strong> The Android app keeps your pilot name, best score, coins, upgrades and
-      sound setting on your phone. This never leaves the device and is removed when you uninstall the app.</li>
+      sound setting on your phone. Apart from Android's own encrypted backup to your Google account (which
+      restores it on a new phone), it never leaves the device and is removed when you uninstall the app.</li>
     <li><strong>Web sign-in.</strong> If you sign in with Google on the website, the server receives your Google
-      display name, email address and profile picture to greet you and label your scores. It is kept only in
-      your browser session.</li>
+      display name, email address and profile picture to greet you and label your scores. These are kept only
+      in your browser session. While you are signed in, your coins, best score and upgrades are saved on the
+      Space Terra server under your Google account ID so they follow you to other browsers.</li>
+    <li><strong>Web as a guest.</strong> Without signing in, your coins, best score and upgrades stay in your
+      browser's local storage.</li>
   </ul>
 
   <h2>Services from Google</h2>
@@ -56,7 +60,7 @@
   </ul>
 
   <h2>Removing your data</h2>
-  <p>To have leaderboard entries removed, open an issue at
+  <p>To have leaderboard entries or saved progress removed, open an issue at
     <a href="https://github.com/haramrit09k/spaceterra/issues">github.com/haramrit09k/spaceterra/issues</a>
     with the pilot name and approximate scores, or use the contact email on the Google Play listing.</p>
 

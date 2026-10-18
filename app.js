@@ -5,6 +5,7 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const config = require('./config');
 const { createPublicHealthHandler } = require('./routes/public-health');
+const { createProgressHandlers } = require('./routes/progress');
 
 const app = express();
 
@@ -71,6 +72,11 @@ app.get('/api/user', (req, res) => {
 });
 
 app.get('/api/public/health', createPublicHealthHandler());
+
+const progress = createProgressHandlers();
+app.get('/api/progress', progress.get);
+app.put('/api/progress', progress.put);
+app.post('/api/progress/link', progress.link);
 
 app.get('/api/user/stats', async (req, res, next) => {
   if (!req.user) {
