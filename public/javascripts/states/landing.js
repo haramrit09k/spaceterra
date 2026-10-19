@@ -10,6 +10,7 @@
   function preload1() {
     UI.preloadCommon();
     game.load.image('logo', 'assets/Space Terra LOGO4.png');
+    game.load.image('googleG', 'assets/google-g.png');
     game.load.audio('mp3', 'media/music.mp3');
   }
 
@@ -73,7 +74,7 @@
           global.username = undefined;
           accountItems.push(UI.pill(game.width - 170, 45, 300, 54, 'Sign in with Google', function () {
             window.location = '/auth/google';
-          }, context, 22));
+          }, context, 22, 'googleG'));
           return;
         }
         global.username = data.user.displayName || data.user.email;

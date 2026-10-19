@@ -5,6 +5,30 @@
  * leaderboard table. Mirrors android/.../ui so both versions look alike.
  */
 (function (global) {
+  // Phaser 2 measures a font's height by drawing text on a canvas and scanning
+  // its pixels for exact colours. Safari's fingerprinting protection adds
+  // noise to canvas pixel reads, so on iPhones that scan reads every font as
+  // several times too tall: lines spread apart and labels drop out of their
+  // buttons. Ask the browser for the text bounds instead, which needs no pixel
+  // reads, and keep Phaser's 6px of descent padding so layouts stay the same.
+  (function measureFontsWithoutPixelReads() {
+    var Text = global.Phaser && global.Phaser.Text;
+    var ctx = Text && Text.fontPropertiesContext;
+    var probe = ctx && ctx.measureText && ctx.measureText('|MÉq');
+    if (!probe || typeof probe.actualBoundingBoxAscent !== 'number') return;
+    Text.prototype.determineFontProperties = function (font) {
+      var cached = Text.fontPropertiesCache[font];
+      if (cached) return cached;
+      ctx.font = font;
+      var m = ctx.measureText('|MÉq');
+      var ascent = Math.ceil(m.actualBoundingBoxAscent);
+      var descent = Math.ceil(m.actualBoundingBoxDescent) + 6;
+      cached = { ascent: ascent, descent: descent, fontSize: ascent + descent };
+      Text.fontPropertiesCache[font] = cached;
+      return cached;
+    };
+  })();
+
   var YELLOW = '#F8E22E';
   var YELLOW_HEX = 0xF8E22E;
   var FONT = 'Goldman, Impact, sans-serif';
@@ -59,14 +83,29 @@
     });
   }
 
-  /** A yellow pill button with black Goldman text, shrunk to fit. */
-  function pill(x, y, w, h, label, onClick, context, size) {
+  /**
+   * A yellow pill button with black Goldman text, shrunk to fit. An optional
+   * `icon` image key is drawn left of the label (e.g. the Google "G").
+   */
+  function pill(x, y, w, h, label, onClick, context, size, icon) {
     var button = game.add.button(x, y, pillTexture(w, h), onClick, context);
     button.anchor.setTo(0.5, 0.5);
     var fontSize = size || Math.round(h * 0.45);
+    var iconSize = icon ? Math.round(h * 0.55) : 0;
+    var gap = icon ? 10 : 0;
     var t = game.make.text(0, 2, label, { font: 'bold ' + fontSize + 'px ' + FONT, fill: '#000' });
     t.anchor.setTo(0.5, 0.5);
-    if (t.width > w - 40) t.scale.setTo((w - 40) / t.width);
+    var room = w - 40 - iconSize - gap;
+    if (t.width > room) t.scale.setTo(room / t.width);
+    if (icon) {
+      // Centre the icon and label together as one group.
+      var groupWidth = iconSize + gap + t.width;
+      var img = game.make.image(-groupWidth / 2 + iconSize / 2, 0, icon);
+      img.anchor.setTo(0.5, 0.5);
+      img.width = img.height = iconSize;
+      button.addChild(img);
+      t.x = -groupWidth / 2 + iconSize + gap + t.width / 2;
+    }
     button.addChild(t);
     button.label = t;
     button.onInputDown.add(function () { button.scale.setTo(0.95); });
