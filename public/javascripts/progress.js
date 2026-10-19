@@ -51,6 +51,17 @@
   var accountRequested = false;
   var saveTimer = null;
   var listeners = [];
+  // Best score this account already has on the leaderboard (from before
+  // saved progress existed). Applied once the account copy has loaded.
+  var leaderboardBest = 0;
+
+  /** Lifts the saved best to the leaderboard best; returns true if it changed. */
+  function applyLeaderboardBest() {
+    if (!account || leaderboardBest <= data.best) return false;
+    data.best = leaderboardBest;
+    save();
+    return true;
+  }
 
   function notify() {
     listeners.forEach(function (fn) { try { fn(); } catch (e) { /* ignore */ } });
@@ -116,10 +127,20 @@
         if (hasAnything(guest)) writeGuest(empty()); // now part of the account
         data = normalize(res.progress);
         account = true;
+        applyLeaderboardBest();
         notify();
       }).catch(function () {
         accountRequested = false; // stay on local progress; try again next time
       });
+    },
+
+    /**
+     * Makes sure the signed-in player's best is at least their best leaderboard
+     * score, so "Your best" and "New personal best!" agree with the leaderboard.
+     */
+    raiseBestFromLeaderboard: function (score) {
+      leaderboardBest = Math.max(leaderboardBest, score | 0);
+      if (applyLeaderboardBest()) notify();
     },
 
     /** Banks a finished run; returns true for a new personal best. */
