@@ -83,14 +83,29 @@
     });
   }
 
-  /** A yellow pill button with black Goldman text, shrunk to fit. */
-  function pill(x, y, w, h, label, onClick, context, size) {
+  /**
+   * A yellow pill button with black Goldman text, shrunk to fit. An optional
+   * `icon` image key is drawn left of the label (e.g. the Google "G").
+   */
+  function pill(x, y, w, h, label, onClick, context, size, icon) {
     var button = game.add.button(x, y, pillTexture(w, h), onClick, context);
     button.anchor.setTo(0.5, 0.5);
     var fontSize = size || Math.round(h * 0.45);
+    var iconSize = icon ? Math.round(h * 0.55) : 0;
+    var gap = icon ? 10 : 0;
     var t = game.make.text(0, 2, label, { font: 'bold ' + fontSize + 'px ' + FONT, fill: '#000' });
     t.anchor.setTo(0.5, 0.5);
-    if (t.width > w - 40) t.scale.setTo((w - 40) / t.width);
+    var room = w - 40 - iconSize - gap;
+    if (t.width > room) t.scale.setTo(room / t.width);
+    if (icon) {
+      // Centre the icon and label together as one group.
+      var groupWidth = iconSize + gap + t.width;
+      var img = game.make.image(-groupWidth / 2 + iconSize / 2, 0, icon);
+      img.anchor.setTo(0.5, 0.5);
+      img.width = img.height = iconSize;
+      button.addChild(img);
+      t.x = -groupWidth / 2 + iconSize + gap + t.width / 2;
+    }
     button.addChild(t);
     button.label = t;
     button.onInputDown.add(function () { button.scale.setTo(0.95); });
