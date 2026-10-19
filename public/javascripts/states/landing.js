@@ -117,8 +117,10 @@
     fetch('/api/user/stats')
       .then(function (res) { return res.json(); })
       .then(function (data) {
-        if (game.state.current !== 'gameState1' || !data || data.score == null || data.rank == null) return;
-        UI.text(30, game.height - 80, 'Top score: ' + data.score, 22, UI.YELLOW);
+        if (!data || data.score == null) return;
+        // One "best" for the player: the saved best, lifted to their leaderboard best.
+        Progress.raiseBestFromLeaderboard(data.score);
+        if (game.state.current !== 'gameState1' || data.rank == null) return;
         UI.text(30, game.height - 40, 'Leaderboard rank: ' + data.rank, 22, UI.YELLOW);
       })
       .catch(function () {});
