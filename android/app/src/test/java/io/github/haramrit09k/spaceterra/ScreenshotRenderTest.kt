@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.MotionEvent
 import androidx.test.core.app.ApplicationProvider
+import io.github.haramrit09k.spaceterra.game.CoinPattern
 import io.github.haramrit09k.spaceterra.game.GameWorld
 import io.github.haramrit09k.spaceterra.game.GameWorld.Pickup
 import io.github.haramrit09k.spaceterra.game.GameWorld.PowerUp
@@ -90,9 +91,15 @@ class ScreenshotRenderTest {
             game.update()
         }
         world.activePowerUps[PowerUp.MAGNET] = 300
-        // A coin trail and a power-up just ahead of the rocket for the shot.
-        for (i in 0 until 5) world.pickups += Pickup(world.rocketX + 120f, world.rocketY - world.rocksOffsetY - 260f - i * 70f, null)
-        world.pickups += Pickup(world.rocketX - 160f, world.rocketY - world.rocksOffsetY - 520f, PowerUp.DOUBLE_COINS)
+        // A few coin shapes and a power-up ahead of the rocket for the shot.
+        world.rocks.clear()
+        world.pickups.clear()
+        val base = world.rocketY - world.rocksOffsetY
+        world.addCoinPattern(CoinPattern.WAVE, base - 200f, 450f)
+        world.addCoinPattern(CoinPattern.RING, base - 850f, 230f)
+        world.addCoinPattern(CoinPattern.CHEVRON, base - 950f, 650f)
+        world.addCoinPattern(CoinPattern.DIAMOND, base - 1250f, 450f)
+        world.pickups += Pickup(world.rocketX - 160f, base - 650f, PowerUp.DOUBLE_COINS)
         repeat(3) { game.update() }
         game.save("gameplay", w, h)
 

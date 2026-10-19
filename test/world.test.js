@@ -116,3 +116,58 @@ test('upgrade and revive prices match the Android app', () => {
   expect(Upgrades.durationTicks(5)).toBe(960);
   expect([0, 1, 2].map(Upgrades.reviveCost)).toEqual([100, 200, 400]);
 });
+
+describe('coin patterns', () => {
+  const { COIN_PATTERNS, pickPattern } = require('../public/javascripts/world');
+  const names = Object.keys(COIN_PATTERNS);
+
+  test('every shape fits on screen wherever it is placed', () => {
+    for (const name of names) {
+      for (let seed = 1; seed <= 50; seed++) {
+        const w = emptyWorld({ random: seeded(seed) });
+        w.addCoinPattern(name, -500);
+        expect(w.pickups).toHaveLength(COIN_PATTERNS[name].offsets.length);
+        for (const p of w.pickups) {
+          expect(p.x).toBeGreaterThanOrEqual(C.COIN_MARGIN - 0.001);
+          expect(p.x + C.COIN_SIZE).toBeLessThanOrEqual(C.WORLD_WIDTH - C.COIN_MARGIN + 0.001);
+          expect(p.y).toBeLessThanOrEqual(-500);
+        }
+      }
+    }
+  });
+
+  test('shapes keep their layout', () => {
+    const w = emptyWorld();
+    w.addCoinPattern('ZIGZAG', 0, 300);
+    expect(w.pickups.map(p => [p.x, p.y]).slice(0, 4)).toEqual([[300, 0], [375, -60], [450, -120], [375, -180]]);
+  });
+
+  test('coins never sit on a rock', () => {
+    const w = emptyWorld();
+    w.rocks.push({ x: 300, y: -100, frame: 0, scale: 1 });
+    w.addCoinPattern('LINE', 0, 300);
+    expect(w.pickups.length).toBeLessThan(5);
+    expect(w.pickups.every(p => p.y < -100 - 72 - 20 || p.y > -100 + 72 + 20 - C.COIN_SIZE)).toBe(true);
+  });
+
+  test('lines stay the most common and every shape shows up', () => {
+    const counts = {};
+    for (let i = 0; i < 1000; i++) {
+      const n = pickPattern(i / 1000);
+      counts[n] = (counts[n] || 0) + 1;
+    }
+    expect(Object.keys(counts).sort()).toEqual(names.slice().sort());
+    expect(counts.LINE).toBeGreaterThan(counts.WAVE * 1.8);
+  });
+
+  test('a long run spawns several different shapes', () => {
+    const w = new GameWorld({ random: seeded(11) });
+    const spy = jest.spyOn(w, 'addCoinPattern');
+    for (let i = 0; i < 20000; i++) {
+      w.activePowerUps.SHIELD = 10;
+      w.tick(true);
+    }
+    const used = new Set(spy.mock.calls.map(c => c[0]));
+    expect(used.size).toBeGreaterThanOrEqual(5);
+  });
+});
