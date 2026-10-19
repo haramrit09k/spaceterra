@@ -5,6 +5,30 @@
  * leaderboard table. Mirrors android/.../ui so both versions look alike.
  */
 (function (global) {
+  // Phaser 2 measures a font's height by drawing text on a canvas and scanning
+  // its pixels for exact colours. Safari's fingerprinting protection adds
+  // noise to canvas pixel reads, so on iPhones that scan reads every font as
+  // several times too tall: lines spread apart and labels drop out of their
+  // buttons. Ask the browser for the text bounds instead, which needs no pixel
+  // reads, and keep Phaser's 6px of descent padding so layouts stay the same.
+  (function measureFontsWithoutPixelReads() {
+    var Text = global.Phaser && global.Phaser.Text;
+    var ctx = Text && Text.fontPropertiesContext;
+    var probe = ctx && ctx.measureText && ctx.measureText('|MÉq');
+    if (!probe || typeof probe.actualBoundingBoxAscent !== 'number') return;
+    Text.prototype.determineFontProperties = function (font) {
+      var cached = Text.fontPropertiesCache[font];
+      if (cached) return cached;
+      ctx.font = font;
+      var m = ctx.measureText('|MÉq');
+      var ascent = Math.ceil(m.actualBoundingBoxAscent);
+      var descent = Math.ceil(m.actualBoundingBoxDescent) + 6;
+      cached = { ascent: ascent, descent: descent, fontSize: ascent + descent };
+      Text.fontPropertiesCache[font] = cached;
+      return cached;
+    };
+  })();
+
   var YELLOW = '#F8E22E';
   var YELLOW_HEX = 0xF8E22E;
   var FONT = 'Goldman, Impact, sans-serif';
